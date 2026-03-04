@@ -1,0 +1,75 @@
+# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 13.1.1)
+FROM nvcr.io/nvidia/cuda:13.1.1-cudnn-runtime-ubuntu22.04
+
+# 대화형 프롬프트 방지 및 타임존 설정
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Seoul
+SHELL ["/bin/bash", "-c"]
+
+# 2. 시스템 기본 패키지 설치
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    sudo \
+    tzdata \
+    locales \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. 일반 유저(user) 생성 및 권한 부여 (QGC 실행을 위해 필수)
+RUN useradd -m -s /bin/bash user && \
+    usermod -aG sudo,dialout,video,plugdev user && \
+    echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+###############################################################
+# 4. QGroundControl v4.3.0 의존성 및 설치
+###############################################################
+# QGC 실행에 필요한 X11, 그래픽 및 GStreamer(비디오 스트리밍) 패키지 설치
+RUN apt-get update && apt-get install -y \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-glx0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-sync1 \
+    libxcb-xfixes0 \
+    libx11-xcb1 \
+    libqt5gui5 \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-libav \
+    gstreamer1.0-gl \
+    libfuse2 \
+    libpulse-mainloop-glib0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /home/user/QGC
+
+# QGC v4.3.0 AppImage 다운로드
+RUN wget https://github.com/mavlink/qgroundcontrol/releases/download/v4.3.0/QGroundControl.AppImage -O QGroundControl.AppImage \
+    && chmod +x QGroundControl.AppImage \
+    # Docker 환경에서 FUSE 권한 문제 회피를 위해 AppImage 압축 해제
+    && ./QGroundControl.AppImage --appimage-extract \
+    && rm QGroundControl.AppImage
+
+# 터미널에서 'qgroundcontrol' 명령어로 바로 실행할 수 있도록 시스템 경로에 링크 생성
+RUN ln -s /home/user/QGC/squashfs-root/AppRun /usr/local/bin/qgroundcontrol
+
+# GUI 앱을 띄우기 위한 X11 통신 환경 변수 세팅
+ENV QT_X11_NO_MITSHM=1
+
+###############################################################
+# 5. 권한 변경 및 USER 전환 (매우 중요)
+###############################################################
+# QGC 파일들의 소유권을 일반 유저로 변경
+RUN chown -R user:user /home/user
+
+# 이후 작업 및 컨테이너 실행은 'user' 계정으로 진행
+USER user
+WORKDIR /home/user
+
+# 컨테이너 실행 시 QGC를 자동으로 실행
+CMD ["qgroundcontrol"]

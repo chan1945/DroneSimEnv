@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # 1. 시뮬레이터 (PX4 + Gazebo)
+  drone_sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.drone_sim
+    container_name: drone_sim
+    privileged: true
+    network_mode: "host"
+    ipc: host
+    shm_size: '2gb'    # Gazebo의 원활한 물리 연산을 위해 추가
+    stdin_open: true   # <--- 추가 (-i 역할)
+    tty: true         # <--- 추가 (-t 역할)
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    deploy:            # --gpus all 옵션을 docker-compose 문법으로 변환
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # 2. 지상 통제소 (QGroundControl)
+  ground:
+    build:
+      context: .
+      dockerfile: Dockerfile.ground
+    container_name: ground
+    privileged: true   # 조이스틱이나 USB 텔레메트리 연결을 위해 필수
+    network_mode: "host"
+    ipc: host
+    stdin_open: true   # <--- 추가 (-i 역할)
+    tty: true         # <--- 추가 (-t 역할)
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # 3. 미션 컴퓨터 (ROS 2 + DDS Agent)
+  companion:
+    build:
+      context: .
+      dockerfile: Dockerfile.companion
+    container_name: companion
+    privileged: true
+    network_mode: "host"
+    ipc: host
+    shm_size: '2gb'    # ROS 2 대용량 메시지(카메라 등) 통신을 위해 필수
+    stdin_open: true   # -i 옵션
+    tty: true          # -t 옵션
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # (주의) 기존 /root/ros_ws 대신 새로운 유저 경로인 /home/user/ros2_ws 로 변경되었습니다.
+      - $HOME/DroneSimEnv/Volume/ros_ws/src:/home/user/ros2_ws/src:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

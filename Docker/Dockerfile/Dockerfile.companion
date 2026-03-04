@@ -1,0 +1,109 @@
+# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 13.1.1)
+FROM nvcr.io/nvidia/cuda:13.1.1-cudnn-runtime-ubuntu22.04
+
+# 대화형 프롬프트 방지 및 타임존 설정
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Seoul
+SHELL ["/bin/bash", "-c"]
+
+# 2. 시스템 기본 패키지 설치
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    curl \
+    cmake \
+    build-essential \
+    python3-pip \
+    sudo \
+    tzdata \
+    lsb-release \
+    software-properties-common \
+    locales \
+    gnupg2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. 일반 유저(user) 생성 및 권한 부여
+RUN useradd -m -s /bin/bash user && \
+    usermod -aG sudo,dialout,video,plugdev user && \
+    echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+###############################################################
+# 4. Micro-XRCE-DDS-Agent v2.4.3 설치 (시스템 전역)
+###############################################################
+WORKDIR /home/user
+RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
+WORKDIR /home/user/Micro-XRCE-DDS-Agent/build
+
+RUN cmake .. \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && rm -rf /home/user/Micro-XRCE-DDS-Agent
+
+###############################################################
+# 5. ROS 2 Humble 설치 (root 권한 필요)
+###############################################################
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        locales \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN locale-gen en_US en_US.UTF-8
+RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        software-properties-common curl \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu \
+    $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        ros-humble-desktop ros-dev-tools \
+        ros-humble-bondcpp ros-humble-ament-cmake-clang-format \
+        ros-humble-vision-msgs \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rosdep init
+
+
+###############################################################
+# 7. 권한 변경 및 USER 전환 (중요)
+###############################################################
+# 지금까지 root가 다운로드한 작업 공간의 소유권을 user로 변경
+RUN chown -R user:user /home/user
+RUN chown -R user:user /home/user/ros2_ws
+
+# 이후 모든 작업은 일반 유저(user)로 진행
+USER user
+WORKDIR /home/user
+
+# ROS 2 환경변수 자동 로드 설정
+RUN rosdep update && \
+    echo "source /opt/ros/humble/setup.bash" >> /home/user/.bashrc
+
+###############################################################
+# 8.px4 msg, ros com 패키지 설치 및 빌드
+###############################################################
+WORKDIR /home/user/ros2_ws/src
+# PX4와 통신하기 위한 메시지 및 통신 패키지 클론
+RUN git clone https://github.com/PX4/px4_msgs.git -b release/1.16
+RUN git clone https://github.com/PX4/px4_ros_com.git -b release/1.16
+
+
+WORKDIR /home/user/ros2_ws
+
+RUN source /opt/ros/humble/setup.bash && \
+    sudo apt-get update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    colcon build --symlink-install && \
+    echo "source /home/user/ros2_ws/install/setup.bash" >> /home/user/.bashrc
+
+###############################################################
+# finalize
+###############################################################
+WORKDIR /home/user/ros2_ws
+CMD ["/bin/bash"]

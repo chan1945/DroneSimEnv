@@ -1,0 +1,11 @@
+[submodule "Volume/ros_ws/src/keyboard_px4_teleop"]
+	path = Volume/ros_ws/src/keyboard_px4_teleop
+	url = https://github.com/chan1945/keyboard_px4_teleop.git
+[submodule "Volume/ros_ws/src/px4_msgs"]
+	path = Volume/ros_ws/src/px4_msgs
+	url = https://github.com/PX4/px4_msgs.git
+	branch = release/1.16
+[submodule "Volume/ros_ws/src/px4_ros_com"]
+	path = Volume/ros_ws/src/px4_ros_com
+	url = https://github.com/PX4/px4_ros_com.git
+	branch = release/1.16
