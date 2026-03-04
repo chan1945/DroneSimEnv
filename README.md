@@ -8,10 +8,17 @@
 ## How to use
 
 ### Build image and Run container
+
+#### Ubuntu
 ```bash
 cd DroneSimEnv/Docker
-chmod +x ./run-ubuntu.sh
 ./run-ubuntu.sh
+```
+
+### WSL2 (Window)
+```bash
+cd DroneSimEnv/Docker
+./run-wsl2.sh
 ```
 
 ## Included Software
