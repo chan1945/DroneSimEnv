@@ -75,7 +75,6 @@ RUN rosdep init
 ###############################################################
 # 지금까지 root가 다운로드한 작업 공간의 소유권을 user로 변경
 RUN chown -R user:user /home/user
-RUN chown -R user:user /home/user/ros2_ws
 
 # 이후 모든 작업은 일반 유저(user)로 진행
 USER user
