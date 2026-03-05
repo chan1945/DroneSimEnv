@@ -1,4 +1,4 @@
-.vscode/*.db*
+.vscode
 build/
 install/
 log/
