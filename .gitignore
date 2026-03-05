@@ -1,1 +1,4 @@
 .vscode/*.db*
+build/
+install/
+log/
