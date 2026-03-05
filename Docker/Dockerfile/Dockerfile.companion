@@ -69,6 +69,19 @@ RUN apt update \
 
 RUN rosdep init
 
+###############################################################
+# ros-humble-ros-gzharmonic 설치 (ROS 2 Humble에서 Gazebo Harmonic 지원)
+###############################################################
+RUN apt-get update
+RUN apt-get install -y curl lsb-release gnupg
+
+# Gazebo 패키지 저장소 추가
+RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+RUN apt-get update
+
+RUN apt-get install -y ros-humble-ros-gzharmonic
+
 
 ###############################################################
 # 7. 권한 변경 및 USER 전환 (중요)
