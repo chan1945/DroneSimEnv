@@ -35,6 +35,7 @@ companion
 ├─Micro XRCE DDS Agent v2.4.3
 ```
 
-
+## !!warning!!
+DroneSimEnv uses the nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 image as its base image to ensure that the implemented code remains compatible with the actual hardware platform, the Jetson Orin Nano, which supports CUDA 12.6.
 
 
