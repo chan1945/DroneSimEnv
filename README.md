@@ -1,4 +1,4 @@
-# Docker container env for Drone simulation
+# Docker container env for Drone simulation (PX4 SITL)
 
 ## Prerequisites (must be installed before running)
 - Docker
