@@ -18,7 +18,7 @@ cd DroneSimEnv/Docker
 ./run-ubuntu.sh
 ```
 
-### WSL2 (Window)
+#### WSL2 (Window)
 ```bash
 cd DroneSimEnv/Docker
 ./run-wsl2.sh
