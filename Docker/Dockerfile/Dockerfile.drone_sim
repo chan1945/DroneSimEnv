@@ -1,5 +1,5 @@
-# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 13.1.1)
-FROM nvcr.io/nvidia/cuda:13.1.1-cudnn-runtime-ubuntu22.04
+# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 12.6)
+FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
 
 # 대화형 프롬프트 방지 및 타임존 설정
 ENV DEBIAN_FRONTEND=noninteractive
