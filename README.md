@@ -6,7 +6,10 @@
 
 
 ## How to use
-
+### clone the repository
+```bash
+git clone --recurse-submodules https://github.com/chan1945/DroneSimEnv.git
+```
 ### Build image and Run container
 
 #### Ubuntu
