@@ -3,7 +3,6 @@ FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
 
 # 대화형 프롬프트 방지 및 타임존 설정
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Seoul
 SHELL ["/bin/bash", "-c"]
 
 # 2. 시스템 기본 패키지 설치
@@ -11,17 +10,51 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     sudo \
-    tzdata \
-    locales \
+    vim \
+    ruby \
+    python3-pip \
+    mesa-utils \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
+    
 
 # 3. 일반 유저(user) 생성 및 권한 부여 (QGC 실행을 위해 필수)
 RUN useradd -m -s /bin/bash user && \
     usermod -aG sudo,dialout,video,plugdev user && \
     echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
+
 ###############################################################
-# 4. QGroundControl v4.3.0 의존성 및 설치
+# ROS 2 Humble 설치
+###############################################################
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        locales \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN locale-gen en_US en_US.UTF-8
+RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        software-properties-common curl \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu \
+    $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        ros-humble-desktop ros-dev-tools \
+        ros-humble-bondcpp ros-humble-ament-cmake-clang-format \
+        ros-humble-vision-msgs \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rosdep init
+
+###############################################################
+# QGC 설치
 ###############################################################
 # QGC 실행에 필요한 X11, 그래픽 및 GStreamer(비디오 스트리밍) 패키지 설치
 RUN apt-get update && apt-get install -y \
@@ -48,12 +81,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /home/user/QGC
 
-# QGC v4.3.0 AppImage 다운로드
-RUN wget https://github.com/mavlink/qgroundcontrol/releases/download/v4.3.0/QGroundControl.AppImage -O QGroundControl.AppImage \
-    && chmod +x QGroundControl.AppImage \
+# QGC latest AppImage 다운로드
+RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
+    && chmod +x QGroundControl-x86_64.AppImage \
     # Docker 환경에서 FUSE 권한 문제 회피를 위해 AppImage 압축 해제
-    && ./QGroundControl.AppImage --appimage-extract \
-    && rm QGroundControl.AppImage
+    && ./QGroundControl-x86_64.AppImage --appimage-extract \
+    && rm QGroundControl-x86_64.AppImage
 
 # 터미널에서 'qgroundcontrol' 명령어로 바로 실행할 수 있도록 시스템 경로에 링크 생성
 RUN ln -s /home/user/QGC/squashfs-root/AppRun /usr/local/bin/qgroundcontrol

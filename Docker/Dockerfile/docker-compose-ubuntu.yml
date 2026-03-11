@@ -3,8 +3,8 @@ services:
   # 1. 시뮬레이터 (PX4 + Gazebo)
   drone_sim:
     build:
-      context: .
-      dockerfile: Dockerfile.drone_sim
+      context: ../..
+      dockerfile: Docker/Dockerfile/Dockerfile.drone_sim
     container_name: drone_sim
     privileged: true
     network_mode: "host"
@@ -30,8 +30,8 @@ services:
   # 2. 지상 통제소 (QGroundControl)
   ground:
     build:
-      context: .
-      dockerfile: Dockerfile.ground
+      context: ../..
+      dockerfile: Docker/Dockerfile/Dockerfile.ground
     container_name: ground
     privileged: true   # 조이스틱이나 USB 텔레메트리 연결을 위해 필수
     network_mode: "host"
@@ -56,8 +56,9 @@ services:
   # 3. 미션 컴퓨터 (ROS 2 + DDS Agent)
   companion:
     build:
-      context: .
-      dockerfile: Dockerfile.companion
+    #context : DroneSimEnv
+      context: ../..
+      dockerfile: Docker/Dockerfile/Dockerfile.companion
     container_name: companion
     privileged: true
     network_mode: "host"
@@ -72,8 +73,8 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # (주의) 기존 /root/ros_ws 대신 새로운 유저 경로인 /home/user/ros2_ws 로 변경되었습니다.
-      - $HOME/DroneSimEnv/Volume/ros_ws/src:/home/user/ros2_ws/src:rw
+      #companion_ws
+      - ../../Companion/companion_ws/src:/DroneSimEnv/companion_ws/src:rw
     deploy:
       resources:
         reservations:

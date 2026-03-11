@@ -22,23 +22,23 @@ RUN apt-get update && apt-get install -y \
     gnupg2 \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. 일반 유저(user) 생성 및 권한 부여
-RUN useradd -m -s /bin/bash user && \
-    usermod -aG sudo,dialout,video,plugdev user && \
-    echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# # 3. 일반 유저(user) 생성 및 권한 부여
+# RUN useradd -m -s /bin/bash user && \
+#     usermod -aG sudo,dialout,video,plugdev user && \
+#     echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 ###############################################################
 # 4. Micro-XRCE-DDS-Agent v2.4.3 설치 (시스템 전역)
 ###############################################################
-WORKDIR /home/user
+WORKDIR /DroneSimEnv
 RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
-WORKDIR /home/user/Micro-XRCE-DDS-Agent/build
+WORKDIR /DroneSimEnv/Micro-XRCE-DDS-Agent/build
 
 RUN cmake .. \
     && make -j$(nproc) \
     && make install \
     && ldconfig \
-    && rm -rf /home/user/Micro-XRCE-DDS-Agent
+    && rm -rf /DroneSimEnv/Micro-XRCE-DDS-Agent
 
 ###############################################################
 # 5. ROS 2 Humble 설치 (root 권한 필요)
@@ -84,38 +84,29 @@ RUN apt-get install -y ros-humble-ros-gzharmonic
 
 
 ###############################################################
-# 7. 권한 변경 및 USER 전환 (중요)
+# 
 ###############################################################
-# 지금까지 root가 다운로드한 작업 공간의 소유권을 user로 변경
-RUN chown -R user:user /home/user
-
-# 이후 모든 작업은 일반 유저(user)로 진행
-USER user
-WORKDIR /home/user
 
 # ROS 2 환경변수 자동 로드 설정
 RUN rosdep update && \
-    echo "source /opt/ros/humble/setup.bash" >> /home/user/.bashrc
+    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 
 ###############################################################
-# 8.px4 msg, ros com 패키지 설치 및 빌드
+# 패키지 설치 및 ROS 2 워크스페이스 설정 
 ###############################################################
-WORKDIR /home/user/ros2_ws/src
-# PX4와 통신하기 위한 메시지 및 통신 패키지 클론
-RUN git clone https://github.com/PX4/px4_msgs.git -b release/1.16
-RUN git clone https://github.com/PX4/px4_ros_com.git -b release/1.16
+COPY Companion/companion_ws/src /DroneSimEnv/companion_ws/src
+# build context는 docker-compose에서 저장소 루트로 지정한다.
 
-
-WORKDIR /home/user/ros2_ws
+WORKDIR /DroneSimEnv/companion_ws
 
 RUN source /opt/ros/humble/setup.bash && \
-    sudo apt-get update && \
+    apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     colcon build --symlink-install && \
-    echo "source /home/user/ros2_ws/install/setup.bash" >> /home/user/.bashrc
+    echo "source /DroneSimEnv/companion_ws/install/setup.bash" >> /root/.bashrc
 
 ###############################################################
 # finalize
 ###############################################################
-WORKDIR /home/user/ros2_ws
+WORKDIR /DroneSimEnv
 CMD ["/bin/bash"]
