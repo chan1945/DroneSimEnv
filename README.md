@@ -3,6 +3,7 @@
 ## Prerequisites (must be installed before running)
 - Docker
 - NVIDIA Container Toolkit — required to use the GPU inside Docker containers
+  https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 
 
 ## How to use
