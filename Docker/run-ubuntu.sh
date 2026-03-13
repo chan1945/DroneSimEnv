@@ -1,45 +1,48 @@
 #!/usr/bin/env bash 
 
-# 스크립트 실행 중 에러 발생 시 즉시 종료 
+# Exit immediately if an error occurs while running the script
 set -euo pipefail 
  
-echo "🚀 드론 시뮬레이션 환경을 시작합니다..."
+echo "🚀 Starting DroneSimEnv (ubuntu)..."
 
-# X11 권한 허용
+# Alow X11 access for Docker containers
 xhost +local:docker
 
-# 사용할 커스텀 compose 파일 이름 지정
+# Specify the custom compose file name to use
 COMPOSE_FILE="Dockerfile/docker-compose-ubuntu.yml"
 
-# =================================================================
-# 🛑 스크립트 종료 시(Ctrl+C) 컨테이너 삭제
-# =================================================================
-trap 'echo ""; echo "🛑 환경을 종료하고 컨테이너를 깨끗하게 삭제합니다..."; docker compose -f "${COMPOSE_FILE}" down' EXIT SIGINT
+###################################################################
+# Clean up containers on Ctrl+C
+###################################################################
+trap 'echo ""; echo "🛑 Shutting down the environment and removing containers cleanly..."; docker compose -f "${COMPOSE_FILE}" down' EXIT SIGINT
 
-# =================================================================
-# 1. 컨테이너를 백그라운드(-d)로 띄우기
-# =================================================================
-echo "📦 컨테이너를 빌드하고 실행합니다..."
+###################################################################
+# Start containers in detached mode (-d)
+###################################################################
+echo "📦 Building and starting containers..."
 docker compose -f "${COMPOSE_FILE}" up --build -d
 
-# 컨테이너가 완전히 켜질 때까지 3초 대기
-echo "⏳ 터미널 접속을 위해 3초 대기합니다..."
+# Wait 3 seconds for containers to fully start
+echo "⏳ Waiting for terminal access (3 seconds)..."
 sleep 3
 
-# =================================================================
-# 2. 새로운 터미널 창 2개 띄우기 (우분투 gnome-terminal)
-# =================================================================
-echo "🖥️ Companion(ROS 2) 및 Drone_sim(PX4) 터미널을 엽니다."
+###################################################################
+# Open 3 new terminal windows (Ubuntu gnome-terminal)
+###################################################################
+echo "🖥️ Opening terminals for Companion, Drone_sim, and Ground."
 
-# 터미널 1: Companion (ROS 2) 접속
-gnome-terminal --title="Companion (ROS2)" -- bash -c "echo '🧠 Companion 컨테이너(ROS 2)에 접속했습니다.'; docker exec -it companion /bin/bash"
+# Terminal 1: Companion
+gnome-terminal --title="Companion (ROS2)" -- bash -c "echo '🧠 Companion container.'; docker exec -it companion /bin/bash"
 
-# 터미널 2: Drone_sim (PX4) 접속
-gnome-terminal --title="Drone Sim (PX4)" -- bash -c "echo '🚁 Drone_sim 컨테이너(PX4)에 접속했습니다.'; docker exec -it drone_sim /bin/bash"
+# Terminal 2: Drone_sim
+gnome-terminal --title="Drone Sim (PX4)" -- bash -c "echo '🚁 Drone_sim container.'; docker exec -it drone_sim /bin/bash"
 
-# =================================================================
-# 3. 메인 화면은 기존처럼 통합 로그 출력
-# =================================================================
-echo "📄 전체 로그를 출력합니다. (환경을 종료하려면 여기서 Ctrl + C 를 누르세요)"
+# Terminal 3: Ground
+gnome-terminal --title="Ground (QGC)" -- bash -c "echo '🛰️ Ground container.'; docker exec -it ground /bin/bash"
+
+###################################################################
+# Follow logs in the main terminal
+###################################################################
+echo "📄 Displaying logs. (Press Ctrl + C here to stop the environment)"
 echo "----------------------------------------------------------------------"
 docker compose -f "${COMPOSE_FILE}" logs -f

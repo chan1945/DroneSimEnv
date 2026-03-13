@@ -1,12 +1,11 @@
-# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 12.6)
+# Base Image 
 FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
 
-# 대화형 프롬프트 방지 및 타임존 설정
+#  not to ask for user input during package installation
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Seoul
 SHELL ["/bin/bash", "-c"]
 
-# 2. 시스템 기본 패키지 설치
+# Install basic packages
 RUN apt-get update && apt-get install -y \
     git \
     wget \
@@ -22,13 +21,9 @@ RUN apt-get update && apt-get install -y \
     gnupg2 \
     && rm -rf /var/lib/apt/lists/*
 
-# # 3. 일반 유저(user) 생성 및 권한 부여
-# RUN useradd -m -s /bin/bash user && \
-#     usermod -aG sudo,dialout,video,plugdev user && \
-#     echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 ###############################################################
-# 4. Micro-XRCE-DDS-Agent v2.4.3 설치 (시스템 전역)
+# Micro-XRCE-DDS-Agent v2.4.3 
 ###############################################################
 WORKDIR /DroneSimEnv
 RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
@@ -41,7 +36,7 @@ RUN cmake .. \
     && rm -rf /DroneSimEnv/Micro-XRCE-DDS-Agent
 
 ###############################################################
-# 5. ROS 2 Humble 설치 (root 권한 필요)
+# ROS 2 Humble 
 ###############################################################
 RUN apt update \
     && apt install -y --no-install-recommends \
@@ -69,33 +64,26 @@ RUN apt update \
 
 RUN rosdep init
 
+RUN rosdep update && \
+    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+
 ###############################################################
-# ros-humble-ros-gzharmonic 설치 (ROS 2 Humble에서 Gazebo Harmonic 지원)
+# ros-humble-ros-gzharmonic 
 ###############################################################
 RUN apt-get update
 RUN apt-get install -y curl lsb-release gnupg
 
-# Gazebo 패키지 저장소 추가
+
 RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
 RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
 RUN apt-get update
 
 RUN apt-get install -y ros-humble-ros-gzharmonic
 
-
 ###############################################################
-# 
-###############################################################
-
-# ROS 2 환경변수 자동 로드 설정
-RUN rosdep update && \
-    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
-
-###############################################################
-# 패키지 설치 및 ROS 2 워크스페이스 설정 
+# workspace setup
 ###############################################################
 COPY Companion/companion_ws/src /DroneSimEnv/companion_ws/src
-# build context는 docker-compose에서 저장소 루트로 지정한다.
 
 WORKDIR /DroneSimEnv/companion_ws
 

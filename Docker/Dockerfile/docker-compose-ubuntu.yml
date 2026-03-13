@@ -1,17 +1,17 @@
 
 services:
-  # 1. 시뮬레이터 (PX4 + Gazebo)
+  # drone_sim
   drone_sim:
     build:
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.drone_sim
     container_name: drone_sim
     privileged: true
     network_mode: "host"
     ipc: host
-    shm_size: '2gb'    # Gazebo의 원활한 물리 연산을 위해 추가
-    stdin_open: true   # <--- 추가 (-i 역할)
-    tty: true         # <--- 추가 (-t 역할)
+    shm_size: '2gb'    
+    stdin_open: true   # -i options
+    tty: true         # -t options
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
@@ -19,7 +19,9 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    deploy:            # --gpus all 옵션을 docker-compose 문법으로 변환
+      # drone_sim_ws
+      - ../../Drone_sim/drone_sim_ws/src:/DroneSimEnv/drone_sim_ws/src:rw
+    deploy:            # GPU
       resources:
         reservations:
           devices:
@@ -27,17 +29,17 @@ services:
               count: all
               capabilities: [gpu]
 
-  # 2. 지상 통제소 (QGroundControl)
+  # ground
   ground:
     build:
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.ground
     container_name: ground
-    privileged: true   # 조이스틱이나 USB 텔레메트리 연결을 위해 필수
+    privileged: true   
     network_mode: "host"
     ipc: host
-    stdin_open: true   # <--- 추가 (-i 역할)
-    tty: true         # <--- 추가 (-t 역할)
+    stdin_open: true   # -i options
+    tty: true         # -t options
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
@@ -45,7 +47,9 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    deploy:
+      # ground_ws
+      - ../../Ground/ground_ws/src:/DroneSimEnv/ground_ws/src:rw
+    deploy:           # GPU
       resources:
         reservations:
           devices:
@@ -53,19 +57,18 @@ services:
               count: all
               capabilities: [gpu]
 
-  # 3. 미션 컴퓨터 (ROS 2 + DDS Agent)
+  # copmanion
   companion:
     build:
-    #context : DroneSimEnv
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.companion
     container_name: companion
     privileged: true
     network_mode: "host"
     ipc: host
-    shm_size: '2gb'    # ROS 2 대용량 메시지(카메라 등) 통신을 위해 필수
-    stdin_open: true   # -i 옵션
-    tty: true          # -t 옵션
+    shm_size: '2gb'    
+    stdin_open: true   # -i options
+    tty: true          # -t options
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
@@ -75,7 +78,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       #companion_ws
       - ../../Companion/companion_ws/src:/DroneSimEnv/companion_ws/src:rw
-    deploy:
+    deploy:          # GPU
       resources:
         reservations:
           devices:

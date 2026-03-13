@@ -21,6 +21,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
+            'cmd_vel_px4_bridge = keyboard_control_v1.cmd_vel_px4_bridge:main',
             'keyboard_control = keyboard_control_v1.keyboard_control:main',
         ],
     },

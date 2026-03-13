@@ -11,10 +11,10 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>offboard_control</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>rosgraph_msgs</exec_depend>
   <depend>geometry_msgs</depend>
+  <depend>px4_msgs</depend>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
 

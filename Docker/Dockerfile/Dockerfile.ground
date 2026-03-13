@@ -1,11 +1,11 @@
-# 1. Base Image 설정 (Ubuntu 22.04 기반 CUDA 12.6)
+# Base Image
 FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
 
-# 대화형 프롬프트 방지 및 타임존 설정
+# not to ask for user input during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
-# 2. 시스템 기본 패키지 설치
+# Install basic packages
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -15,17 +15,11 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     mesa-utils \
     net-tools \
+    gosu \                
     && rm -rf /var/lib/apt/lists/*
     
-
-# 3. 일반 유저(user) 생성 및 권한 부여 (QGC 실행을 위해 필수)
-RUN useradd -m -s /bin/bash user && \
-    usermod -aG sudo,dialout,video,plugdev user && \
-    echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-
 ###############################################################
-# ROS 2 Humble 설치
+# ROS 2 Humble
 ###############################################################
 RUN apt update \
     && apt install -y --no-install-recommends \
@@ -53,10 +47,12 @@ RUN apt update \
 
 RUN rosdep init
 
+RUN rosdep update && \
+    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 ###############################################################
-# QGC 설치
+# QGroundControl AppImage dependencies
 ###############################################################
-# QGC 실행에 필요한 X11, 그래픽 및 GStreamer(비디오 스트리밍) 패키지 설치
+# Package dependencies for QGC AppImage
 RUN apt-get update && apt-get install -y \
     libxcb-xinerama0 \
     libxkbcommon-x11-0 \
@@ -79,30 +75,40 @@ RUN apt-get update && apt-get install -y \
     libpulse-mainloop-glib0 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /home/user/QGC
+# QGC as qgcuser
+WORKDIR /
+RUN useradd -m -s /bin/bash qgcuser
+RUN usermod -aG dialout qgcuser
 
-# QGC latest AppImage 다운로드
+# QGC latest AppImage
 RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
     && chmod +x QGroundControl-x86_64.AppImage \
-    # Docker 환경에서 FUSE 권한 문제 회피를 위해 AppImage 압축 해제
     && ./QGroundControl-x86_64.AppImage --appimage-extract \
     && rm QGroundControl-x86_64.AppImage
 
-# 터미널에서 'qgroundcontrol' 명령어로 바로 실행할 수 있도록 시스템 경로에 링크 생성
-RUN ln -s /home/user/QGC/squashfs-root/AppRun /usr/local/bin/qgroundcontrol
+# symlink for easy execution (qgc)
+RUN ln -s /squashfs-root/AppRun /usr/local/bin/qgc
 
-# GUI 앱을 띄우기 위한 X11 통신 환경 변수 세팅
+# For GUI applications
 ENV QT_X11_NO_MITSHM=1
 
 ###############################################################
-# 5. 권한 변경 및 USER 전환 (매우 중요)
+# workspace setup
 ###############################################################
-# QGC 파일들의 소유권을 일반 유저로 변경
-RUN chown -R user:user /home/user
+COPY Ground/ground_ws/src /DroneSimEnv/ground_ws/src
+# for running entrypoint script with gosu
+COPY Docker/ground-entrypoint.sh /usr/local/bin/ground-entrypoint
 
-# 이후 작업 및 컨테이너 실행은 'user' 계정으로 진행
-USER user
-WORKDIR /home/user
+WORKDIR /DroneSimEnv/ground_ws
+RUN source /opt/ros/humble/setup.bash && \
+    apt-get update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    colcon build --symlink-install && \
+    echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
+RUN chmod +x /usr/local/bin/ground-entrypoint
 
-# 컨테이너 실행 시 QGC를 자동으로 실행
-CMD ["qgroundcontrol"]
+################################################################
+# finalize
+################################################################
+WORKDIR /DroneSimEnv/ground_ws
+CMD [ "/usr/local/bin/ground-entrypoint" ]

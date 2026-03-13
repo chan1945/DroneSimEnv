@@ -1,25 +1,25 @@
 
 services:
-  # 1. 시뮬레이터 (PX4 + Gazebo)
+  # drone_sim
   drone_sim:
     build:
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.drone_sim
     container_name: drone_sim
     privileged: true
     network_mode: "host"
     ipc: host
-    shm_size: '2gb'    # Gazebo의 원활한 물리 연산을 위해 추가
-    stdin_open: true   # -i 역할
-    tty: true          # -t 역할
+    shm_size: '2gb'    
+    stdin_open: true   # -i options
+    tty: true          # -t options
     environment:
-      # GUI 및 WSLg 설정
+      # GUI, WSLg settings
       - DISPLAY=${DISPLAY:-:0}
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}
       - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}
       - PULSE_SERVER=${PULSE_SERVER:-unix:/mnt/wslg/PulseServer}
       - QT_X11_NO_MITSHM=1
-      # NVIDIA / GPU 가속 관련 설정
+      # NVIDIA / GPU settings
       - NVIDIA_DRIVER_CAPABILITIES=all
       - NVIDIA_VISIBLE_DEVICES=all
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib
@@ -27,12 +27,14 @@ services:
       - LIBGL_ALWAYS_SOFTWARE=0
       - __GLX_VENDOR_LIBRARY_NAME=nvidia
     volumes:
-      # 소켓 및 WSL2 라이브러리 마운트
+      # socket , WSLg volumes for GUI forwarding
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg
       - /usr/lib/wsl:/usr/lib/wsl
+      # drone_sim_ws
+      - ../../Drone_sim/drone_sim_ws/src:/DroneSimEnv/drone_sim_ws/src:rw
     devices:
-      # WSL2 GPU 가상 디바이스 전달
+      # WSL2 GPU virtual device
       - /dev/dxg:/dev/dxg
     deploy:
       resources:
@@ -42,23 +44,25 @@ services:
               count: all
               capabilities: [gpu]
 
-  # 2. 지상 통제소 (QGroundControl)
+  # ground
   ground:
     build:
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.ground
     container_name: ground
-    privileged: true   # 조이스틱이나 USB 텔레메트리 연결을 위해 필수
+    privileged: true   
     network_mode: "host"
     ipc: host
     stdin_open: true
     tty: true
     environment:
+      # GUI, WSLg settings
       - DISPLAY=${DISPLAY:-:0}
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}
       - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}
       - PULSE_SERVER=${PULSE_SERVER:-unix:/mnt/wslg/PulseServer}
       - QT_X11_NO_MITSHM=1
+      # NVIDIA / GPU settings
       - NVIDIA_DRIVER_CAPABILITIES=all
       - NVIDIA_VISIBLE_DEVICES=all
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib
@@ -69,6 +73,8 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg
       - /usr/lib/wsl:/usr/lib/wsl
+      # ground_ws
+      - ../../Ground/ground_ws/src:/DroneSimEnv/ground_ws/src:rw
     devices:
       - /dev/dxg:/dev/dxg
     deploy:
@@ -79,24 +85,26 @@ services:
               count: all
               capabilities: [gpu]
 
-  # 3. 미션 컴퓨터 (ROS 2 + DDS Agent)
+  # companion
   companion:
     build:
-      context: ../..
+      context: ../.. # root: DroneSimEnv
       dockerfile: Docker/Dockerfile/Dockerfile.companion
     container_name: companion
     privileged: true
     network_mode: "host"
     ipc: host
-    shm_size: '2gb'    # ROS 2 대용량 메시지(카메라 등) 통신을 위해 필수
+    shm_size: '2gb'    
     stdin_open: true
     tty: true
     environment:
+      # GUI, WSLg settings
       - DISPLAY=${DISPLAY:-:0}
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}
       - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}
       - PULSE_SERVER=${PULSE_SERVER:-unix:/mnt/wslg/PulseServer}
       - QT_X11_NO_MITSHM=1
+      # NVIDIA / GPU settings
       - NVIDIA_DRIVER_CAPABILITIES=all
       - NVIDIA_VISIBLE_DEVICES=all
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib
@@ -107,8 +115,8 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg
       - /usr/lib/wsl:/usr/lib/wsl
-      # ROS2 워크스페이스 추가 마운트
-      - $HOME/DroneSimEnv/Volume/ros_ws/src:/home/user/ros2_ws/src:rw
+      #companion_ws
+      - ../../Companion/companion_ws/src:/DroneSimEnv/companion_ws/src:rw
     devices:
       - /dev/dxg:/dev/dxg
     deploy:
