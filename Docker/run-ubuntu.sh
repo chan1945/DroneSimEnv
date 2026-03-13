@@ -3,6 +3,32 @@
 # Exit immediately if an error occurs while running the script
 set -euo pipefail 
  
+# Default behavior keeps the original `down` cleanup unless `--keep` is provided.
+KEEP_CONTAINERS=false
+
+usage() {
+    echo "Usage: $0 [--keep]"
+    echo "  --keep    Stop containers instead of removing them on exit"
+}
+
+# Parse optional flags before starting the environment.
+for arg in "$@"; do
+    case "${arg}" in
+        --keep)
+            KEEP_CONTAINERS=true
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: ${arg}" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
 echo "🚀 Starting DroneSimEnv (ubuntu)..."
 
 # Alow X11 access for Docker containers
@@ -10,11 +36,30 @@ xhost +local:docker
 
 # Specify the custom compose file name to use
 COMPOSE_FILE="Dockerfile/docker-compose-ubuntu.yml"
+# Prevent cleanup from running twice when both SIGINT and EXIT are triggered.
+CLEANUP_DONE=false
+
+cleanup() {
+    if [[ "${CLEANUP_DONE}" == "true" ]]; then
+        return
+    fi
+    CLEANUP_DONE=true
+
+    # Keep containers when requested, otherwise remove them as before.
+    echo ""
+    if [[ "${KEEP_CONTAINERS}" == "true" ]]; then
+        echo "🛑 Stopping the environment and keeping containers..."
+        docker compose -f "${COMPOSE_FILE}" stop
+    else
+        echo "🛑 Shutting down the environment and removing containers cleanly..."
+        docker compose -f "${COMPOSE_FILE}" down
+    fi
+}
 
 ###################################################################
 # Clean up containers on Ctrl+C
 ###################################################################
-trap 'echo ""; echo "🛑 Shutting down the environment and removing containers cleanly..."; docker compose -f "${COMPOSE_FILE}" down' EXIT SIGINT
+trap cleanup EXIT SIGINT SIGTERM
 
 ###################################################################
 # Start containers in detached mode (-d)
@@ -43,6 +88,10 @@ gnome-terminal --title="Ground (QGC)" -- bash -c "echo '🛰️ Ground container
 ###################################################################
 # Follow logs in the main terminal
 ###################################################################
-echo "📄 Displaying logs. (Press Ctrl + C here to stop the environment)"
+if [[ "${KEEP_CONTAINERS}" == "true" ]]; then
+    echo "📄 Displaying logs. (Press Ctrl + C here to stop containers and keep them)"
+else
+    echo "📄 Displaying logs. (Press Ctrl + C here to stop the environment)"
+fi
 echo "----------------------------------------------------------------------"
 docker compose -f "${COMPOSE_FILE}" logs -f
