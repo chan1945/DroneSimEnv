@@ -24,6 +24,17 @@ cd DroneSimEnv/Docker
 ./run-wsl2.sh
 ```
 
+If you want to stop the containers without removing them, run the script with the --keep option:
+```bash
+cd DroneSimEnv/Docker
+./run-ubuntu.sh --keep
+```
+
+```bash
+cd DroneSimEnv/Docker
+./run-wsl2.sh --keep
+```
+
 ## Included Software
 ```
 drone_sim
