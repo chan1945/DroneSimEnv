@@ -5,6 +5,9 @@
 - NVIDIA Container Toolkit — required to use the GPU inside Docker containers
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 
+## Demo Video
+
+[![Watch the demo](https://img.youtube.com/vi/C68um9y9g6o/0.jpg)](https://www.youtube.com/watch?v=C68um9y9g6o)
 
 ## How to use
 ### clone the repository
