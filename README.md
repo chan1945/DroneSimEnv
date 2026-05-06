@@ -14,31 +14,59 @@
 ```bash
 git clone --recurse-submodules https://github.com/chan1945/DroneSimEnv.git
 ```
-### Build image and Run container
+### Build image and run containers
 
 #### Ubuntu
 ```bash
 cd DroneSimEnv/Docker
-./run-ubuntu.sh
+./run-ubuntu.sh up
 ```
 
-#### WSL2 (Window)
+#### WSL2 (Windows)
 ```bash
 cd DroneSimEnv/Docker
-./run-wsl2.sh
+./run-wsl2.sh up
 ```
 
-If you want to stop the containers without removing them, run the script with the --keep option:
-#### Ubuntu
+The `up` command builds the Docker images, starts the three containers in the background, and opens terminal windows for:
+- `companion`
+- `drone_sim`
+- `ground`
+
+### Container management commands
+
+Ubuntu:
 ```bash
 cd DroneSimEnv/Docker
-./run-ubuntu.sh --keep
+
+./run-ubuntu.sh up
+./run-ubuntu.sh logs
+./run-ubuntu.sh shell companion
+./run-ubuntu.sh shell drone_sim
+./run-ubuntu.sh shell ground
+./run-ubuntu.sh stop
+./run-ubuntu.sh down
 ```
-#### WSL2 (Window)
+
+WSL2:
 ```bash
 cd DroneSimEnv/Docker
-./run-wsl2.sh --keep
+
+./run-wsl2.sh up
+./run-wsl2.sh logs
+./run-wsl2.sh shell companion
+./run-wsl2.sh shell drone_sim
+./run-wsl2.sh shell ground
+./run-wsl2.sh stop
+./run-wsl2.sh down
 ```
+
+Command behavior:
+- `up`: build images and start containers in detached mode
+- `logs`: follow Docker Compose logs; pressing `Ctrl+C` stops log viewing only
+- `shell <service>`: open an interactive shell inside `companion`, `drone_sim`, or `ground`
+- `stop`: stop containers while keeping them
+- `down`: stop and remove containers
 
 ## Included Software
 ```
@@ -56,5 +84,3 @@ companion
 
 ## !!warning!!
 DroneSimEnv uses the nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 image as its base image to ensure that the implemented code remains compatible with the actual hardware platform, the Jetson Orin Nano, which supports CUDA 12.6.
-
-
