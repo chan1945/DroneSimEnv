@@ -4,7 +4,7 @@
 # This file only builds images. It does not start containers.
 set -euo pipefail
 
-# Find the Docker folder and the top folder of this project.
+# Find the scripts folder and the top folder of this project.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -48,7 +48,7 @@ build_image() {
     echo "Building ${name} image..."
     docker build \
         --tag "${image}" \
-        --file "${SCRIPT_DIR}/Dockerfile/${dockerfile}" \
+        --file "${PROJECT_ROOT}/Docker/Dockerfile/${dockerfile}" \
         "${PROJECT_ROOT}"
 }
 

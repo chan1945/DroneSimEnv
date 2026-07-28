@@ -28,9 +28,9 @@ Ubuntu and WSL2 use the same commands. `sim_run.sh` detects WSL2 by itself and
 uses its graphics settings automatically.
 
 ```bash
-cd DroneSimEnv/Docker
-./sim_build.sh
-./sim_run.sh
+cd DroneSimEnv
+./scripts/sim_build.sh
+./scripts/sim_run.sh
 ```
 
 The build script creates the Docker images. The run script then starts the three
