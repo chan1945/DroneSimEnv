@@ -4,6 +4,14 @@
 - Docker
 - NVIDIA Container Toolkit — required to use the GPU inside Docker containers
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
+- xterm — opens a terminal window on the Ubuntu GNOME or WSL2 host
+
+Install xterm before running the project:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y xterm
+```
 
 ## Demo Video
 
@@ -26,14 +34,28 @@ cd DroneSimEnv/Docker
 ```
 
 The build script creates the Docker images. The run script then starts the three
-containers in the background and opens terminal windows for:
+containers in the background and opens one `xterm` window for each service:
 - `companion`
 - `drone_sim`
 - `ground`
 
-Keep the original terminal window open while using the new shell windows. Press
-any key in the original window to stop and remove all three containers. Pressing
-`Ctrl+C` also removes them.
+Each xterm window connects to a `tmux` session inside its Docker container. This
+lets a command keep running after you close that xterm window. Keep the original
+terminal window open while using the xterm windows. Press any key in the original
+window to stop and remove all three containers. Pressing `Ctrl+C` also removes
+them.
+
+### Reconnect to a tmux session
+
+While `sim_run.sh` is still waiting for a key press, reopen a service terminal
+with this command in another host terminal:
+
+```bash
+docker exec -it companion tmux new-session -A -s companion -c /DroneSimEnv/companion_ws
+```
+
+Replace `companion` with `drone_sim` or `ground` when needed. Their starting
+folders are `/DroneSimEnv/PX4-Autopilot` and `/DroneSimEnv/ground_ws`.
 
 ## Included Software
 ```

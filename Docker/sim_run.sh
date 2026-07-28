@@ -23,36 +23,6 @@ is_wsl2() {
     grep -qi microsoft /proc/version 2>/dev/null
 }
 
-configure_wsl2_terminal() {
-    # WSL2 needs a terminal app before this script can open shell windows.
-    # It also needs these fonts so normal text and emoji look correct.
-    if command -v xfce4-terminal >/dev/null 2>&1 && \
-        dpkg -s fonts-noto-cjk >/dev/null 2>&1 && \
-        dpkg -s fonts-noto-color-emoji >/dev/null 2>&1; then
-        return
-    fi
-
-    echo "Installing the WSL2 terminal app and fonts..."
-    echo "Your password may be needed to install these packages."
-    sudo apt-get update
-    sudo apt-get install -y \
-        xfce4-terminal \
-        dbus-x11 \
-        fonts-noto-cjk \
-        fonts-noto-color-emoji
-
-    # Rebuild the font list so new terminal windows can use the new fonts.
-    if command -v fc-cache >/dev/null 2>&1; then
-        fc-cache -fv >/dev/null 2>&1
-    fi
-}
-
-configure_wsl2_locale() {
-    # Tell terminal programs to use the common UTF-8 text format.
-    export LANG=en_US.UTF-8
-    export LC_ALL=en_US.UTF-8
-}
-
 require_docker() {
     # Stop early when Docker is missing or cannot be used.
     command -v docker >/dev/null 2>&1 || {
@@ -62,6 +32,17 @@ require_docker() {
 
     docker info >/dev/null 2>&1 || {
         echo "ERROR: Docker is not ready for the current user." >&2
+        exit 1
+    }
+}
+
+require_xterm() {
+    # xterm opens one small terminal window for each container.
+    # It must be installed on the Ubuntu or WSL2 host, not in Docker.
+    command -v xterm >/dev/null 2>&1 || {
+        echo "ERROR: xterm is not installed or is not on PATH." >&2
+        echo "Install it on the host, then run this script again:" >&2
+        echo "  sudo apt-get update && sudo apt-get install -y xterm" >&2
         exit 1
     }
 }
@@ -187,19 +168,13 @@ run_service() {
 open_terminal() {
     local service="$1"
     local title="$2"
+    local workdir="$3"
 
-    # Ubuntu and WSL2 normally use different terminal programs.
-    if is_wsl2 && command -v xfce4-terminal >/dev/null 2>&1; then
-        env GTK_THEME=Adwaita:dark xfce4-terminal \
-            --title="${title}" \
-            -x bash -c "docker exec -it ${service} /bin/bash" &
-    elif ! is_wsl2 && command -v gnome-terminal >/dev/null 2>&1; then
-        gnome-terminal \
-            --title="${title}" \
-            -- bash -c "docker exec -it ${service} /bin/bash" &
-    else
-        echo "Container '${service}' is running, but no terminal app was found."
-    fi
+    # xterm is on the host. tmux is inside the container.
+    # -A makes a new tmux session or joins the old one with the same name.
+    xterm -T "${title}" -e \
+        docker exec -it "${service}" \
+        tmux new-session -A -s "${service}" -c "${workdir}" &
 }
 
 main() {
@@ -212,10 +187,7 @@ main() {
 
     require_docker
     require_images
-    if is_wsl2; then
-        configure_wsl2_terminal
-        configure_wsl2_locale
-    fi
+    require_xterm
     configure_x11_access
 
     # Delete only old project containers before making fresh ones.
@@ -231,11 +203,14 @@ main() {
         "${PROJECT_ROOT}/Companion/companion_ws/src" \
         "/DroneSimEnv/companion_ws/src"
 
-    # Give Docker a moment before the new shell windows try to enter containers.
+    # Give Docker a moment before the new xterm windows enter the containers.
     sleep 3
-    open_terminal "companion" "Companion (ROS 2)"
-    open_terminal "drone_sim" "Drone Sim (PX4)"
-    open_terminal "ground" "Ground (QGC)"
+    open_terminal "companion" "Companion (ROS 2)" \
+        "/DroneSimEnv/companion_ws"
+    open_terminal "drone_sim" "Drone Sim (PX4)" \
+        "/DroneSimEnv/PX4-Autopilot"
+    open_terminal "ground" "Ground (QGC)" \
+        "/DroneSimEnv/ground_ws"
 
     echo "DroneSimEnv is running. Press any key in this window to stop it."
     if ! IFS= read -r -n 1 -s; then

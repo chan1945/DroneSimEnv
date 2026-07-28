@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
 # Install basic packages
+# tmux keeps a service shell running after its xterm window closes.
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -13,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     ruby \
     python3-pip \
+    tmux \
     mesa-utils \
     net-tools \
     gosu \                
