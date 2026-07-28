@@ -14,21 +14,23 @@
 ```bash
 git clone --recurse-submodules https://github.com/chan1945/DroneSimEnv.git
 ```
-### Build image and run containers
+### Build images and run containers
 
 #### Ubuntu
 ```bash
 cd DroneSimEnv/Docker
-./run-ubuntu.sh up
+./sim_build.sh
+./sim_run.sh up
 ```
 
 #### WSL2 (Windows)
 ```bash
 cd DroneSimEnv/Docker
-./run-wsl2.sh up
+./sim_build.sh
+./sim_run.sh up
 ```
 
-The `up` command builds the Docker images, starts the three containers in the background, and opens terminal windows for:
+The build script creates the Docker images. The `up` command then starts the three containers in the background and opens terminal windows for:
 - `companion`
 - `drone_sim`
 - `ground`
@@ -39,31 +41,31 @@ Ubuntu:
 ```bash
 cd DroneSimEnv/Docker
 
-./run-ubuntu.sh up
-./run-ubuntu.sh logs
-./run-ubuntu.sh shell companion
-./run-ubuntu.sh shell drone_sim
-./run-ubuntu.sh shell ground
-./run-ubuntu.sh stop
-./run-ubuntu.sh down
+./sim_run.sh up
+./sim_run.sh logs
+./sim_run.sh shell companion
+./sim_run.sh shell drone_sim
+./sim_run.sh shell ground
+./sim_run.sh stop
+./sim_run.sh down
 ```
 
 WSL2:
 ```bash
 cd DroneSimEnv/Docker
 
-./run-wsl2.sh up
-./run-wsl2.sh logs
-./run-wsl2.sh shell companion
-./run-wsl2.sh shell drone_sim
-./run-wsl2.sh shell ground
-./run-wsl2.sh stop
-./run-wsl2.sh down
+./sim_run.sh up
+./sim_run.sh logs
+./sim_run.sh shell companion
+./sim_run.sh shell drone_sim
+./sim_run.sh shell ground
+./sim_run.sh stop
+./sim_run.sh down
 ```
 
 Command behavior:
-- `up`: build images and start containers in detached mode
-- `logs`: follow Docker Compose logs; pressing `Ctrl+C` stops log viewing only
+- `up`: start containers in detached mode (run `./sim_build.sh` first)
+- `logs`: follow container logs; pressing `Ctrl+C` stops log viewing only
 - `shell <service>`: open an interactive shell inside `companion`, `drone_sim`, or `ground`
 - `stop`: stop containers while keeping them
 - `down`: stop and remove containers
