@@ -57,6 +57,15 @@ docker exec -it drone tmux new-session -A -s drone -c /DroneSimEnv/drone_ws
 Replace `drone` with `simulation` or `ground` when needed. Their starting
 folders are `/DroneSimEnv/simulation_ws` and `/DroneSimEnv/ground_ws`.
 
+### QGroundControl logs
+
+The `ground` container saves QGroundControl output in `/tmp/qgc.log`. Use this
+command when QGroundControl does not open or closes unexpectedly:
+
+```bash
+docker exec -it ground cat /tmp/qgc.log
+```
+
 ## Included Software
 ```
 simulation

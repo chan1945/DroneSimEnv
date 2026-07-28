@@ -98,8 +98,6 @@ ENV QT_X11_NO_MITSHM=1
 # workspace setup
 ###############################################################
 COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
-# for running entrypoint script with gosu
-COPY Docker/ground-entrypoint.sh /usr/local/bin/ground-entrypoint
 
 WORKDIR /DroneSimEnv/ground_ws
 RUN source /opt/ros/humble/setup.bash && \
@@ -107,10 +105,37 @@ RUN source /opt/ros/humble/setup.bash && \
     rosdep install --from-paths src --ignore-src -r -y && \
     colcon build --symlink-install && \
     echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
-RUN chmod +x /usr/local/bin/ground-entrypoint
 
 ################################################################
 # finalize
 ################################################################
 WORKDIR /DroneSimEnv/ground_ws
-CMD [ "/usr/local/bin/ground-entrypoint" ]
+# Start QGroundControl when a GUI display is available.
+# Keep the container alive so sim_run.sh can open a tmux shell inside it.
+# Stop child processes safely when Docker asks the container to exit.
+CMD ["/bin/bash", "-lc", "set -Eeuo pipefail; \
+QGC_PID=''; \
+KEEPALIVE_PID=''; \
+cleanup() { \
+    if [[ -n \"${QGC_PID}\" ]] && kill -0 \"${QGC_PID}\" 2>/dev/null; then \
+        kill \"${QGC_PID}\" 2>/dev/null || true; \
+        wait \"${QGC_PID}\" 2>/dev/null || true; \
+    fi; \
+    if [[ -n \"${KEEPALIVE_PID}\" ]] && kill -0 \"${KEEPALIVE_PID}\" 2>/dev/null; then \
+        kill \"${KEEPALIVE_PID}\" 2>/dev/null || true; \
+        wait \"${KEEPALIVE_PID}\" 2>/dev/null || true; \
+    fi; \
+}; \
+trap cleanup EXIT; \
+trap 'exit 0' INT TERM; \
+if [[ -n \"${DISPLAY:-}\" || -n \"${WAYLAND_DISPLAY:-}\" ]]; then \
+    echo 'Starting QGroundControl...'; \
+    gosu qgcuser env HOME=/home/qgcuser DISPLAY=\"${DISPLAY:-}\" WAYLAND_DISPLAY=\"${WAYLAND_DISPLAY:-}\" XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-}\" PULSE_SERVER=\"${PULSE_SERVER:-}\" QT_X11_NO_MITSHM=\"${QT_X11_NO_MITSHM:-1}\" qgc >/tmp/qgc.log 2>&1 & \
+    QGC_PID=$!; \
+    echo 'QGroundControl started. Logs: /tmp/qgc.log'; \
+else \
+    echo 'Skipping QGroundControl startup because no GUI display variables are set.'; \
+fi; \
+tail -f /dev/null & \
+KEEPALIVE_PID=$!; \
+wait \"${KEEPALIVE_PID}\""]
