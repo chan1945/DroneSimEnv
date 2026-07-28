@@ -1,8 +1,0 @@
-[submodule "Companion/companion_ws/src/px4_msgs"]
-	path = Companion/companion_ws/src/px4_msgs
-	url = https://github.com/PX4/px4_msgs.git
-	branch = release/1.16
-[submodule "Companion/companion_ws/src/px4_ros_com"]
-	path = Companion/companion_ws/src/px4_ros_com
-	url = https://github.com/PX4/px4_ros_com.git
-	branch = release/1.16

@@ -20,7 +20,7 @@ sudo apt-get install -y xterm
 ## How to use
 ### clone the repository
 ```bash
-git clone --recurse-submodules https://github.com/chan1945/DroneSimEnv.git
+git clone https://github.com/chan1945/DroneSimEnv.git
 ```
 ### Build images and run containers
 
@@ -35,8 +35,8 @@ cd DroneSimEnv/Docker
 
 The build script creates the Docker images. The run script then starts the three
 containers in the background and opens one `xterm` window for each service:
-- `companion`
-- `drone_sim`
+- `drone`
+- `simulation`
 - `ground`
 
 Each xterm window connects to a `tmux` session inside its Docker container. This
@@ -51,22 +51,22 @@ While `sim_run.sh` is still waiting for a key press, reopen a service terminal
 with this command in another host terminal:
 
 ```bash
-docker exec -it companion tmux new-session -A -s companion -c /DroneSimEnv/companion_ws
+docker exec -it drone tmux new-session -A -s drone -c /DroneSimEnv/drone_ws
 ```
 
-Replace `companion` with `drone_sim` or `ground` when needed. Their starting
-folders are `/DroneSimEnv/PX4-Autopilot` and `/DroneSimEnv/ground_ws`.
+Replace `drone` with `simulation` or `ground` when needed. Their starting
+folders are `/DroneSimEnv/simulation_ws` and `/DroneSimEnv/ground_ws`.
 
 ## Included Software
 ```
-drone_sim
+simulation
 ├─PX4 v1.16.1
 ├─Gazebo Harmonic
 
 ground
 ├─QGroundControl
 
-companion
+drone
 ├─ROS2 Humble
 ├─Micro XRCE DDS Agent v2.4.3
 ```

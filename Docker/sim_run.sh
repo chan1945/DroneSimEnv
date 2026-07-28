@@ -10,9 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Keep these names in one place so cleanup only removes this project's containers.
-SERVICES=("companion" "drone_sim" "ground")
-DRONE_SIM_IMAGE="dronesimenv/drone_sim:latest"
-COMPANION_IMAGE="dronesimenv/companion:latest"
+SERVICES=("simulation" "drone" "ground")
+SIMULATION_IMAGE="dronesimenv/simulation:latest"
+DRONE_IMAGE="dronesimenv/drone:latest"
 GROUND_IMAGE="dronesimenv/ground:latest"
 # These flags stop cleanup from running too early or running twice.
 CLEANUP_DONE=false
@@ -56,7 +56,7 @@ require_images() {
     # Do not remove old containers until all new images are ready to use.
     local image
 
-    for image in "${DRONE_SIM_IMAGE}" "${COMPANION_IMAGE}" "${GROUND_IMAGE}"; do
+    for image in "${SIMULATION_IMAGE}" "${DRONE_IMAGE}" "${GROUND_IMAGE}"; do
         docker image inspect "${image}" >/dev/null 2>&1 || {
             echo "ERROR: image '${image}' was not found." >&2
             echo "Run '${SCRIPT_DIR}/sim_build.sh' before starting containers." >&2
@@ -137,8 +137,8 @@ run_service() {
         --volume "${workspace_source}:${workspace_target}:rw"
     )
 
-    # The simulator and companion need extra shared memory.
-    if [[ "${service}" == "drone_sim" || "${service}" == "companion" ]]; then
+    # The simulation and drone containers need extra shared memory.
+    if [[ "${service}" == "simulation" || "${service}" == "drone" ]]; then
         run_args+=(--shm-size 2g)
     fi
 
@@ -193,22 +193,22 @@ main() {
     # Delete only old project containers before making fresh ones.
     CLEANUP_ENABLED=true
     remove_project_containers
-    run_service "drone_sim" "${DRONE_SIM_IMAGE}" \
-        "${PROJECT_ROOT}/Drone_sim/drone_sim_ws/src" \
-        "/DroneSimEnv/drone_sim_ws/src"
+    run_service "simulation" "${SIMULATION_IMAGE}" \
+        "${PROJECT_ROOT}/simulation/simulation_ws/src" \
+        "/DroneSimEnv/simulation_ws/src"
     run_service "ground" "${GROUND_IMAGE}" \
-        "${PROJECT_ROOT}/Ground/ground_ws/src" \
+        "${PROJECT_ROOT}/ground/ground_ws/src" \
         "/DroneSimEnv/ground_ws/src"
-    run_service "companion" "${COMPANION_IMAGE}" \
-        "${PROJECT_ROOT}/Companion/companion_ws/src" \
-        "/DroneSimEnv/companion_ws/src"
+    run_service "drone" "${DRONE_IMAGE}" \
+        "${PROJECT_ROOT}/drone/drone_ws/src" \
+        "/DroneSimEnv/drone_ws/src"
 
     # Give Docker a moment before the new xterm windows enter the containers.
     sleep 3
-    open_terminal "companion" "Companion (ROS 2)" \
-        "/DroneSimEnv/companion_ws"
-    open_terminal "drone_sim" "Drone Sim (PX4)" \
-        "/DroneSimEnv/PX4-Autopilot"
+    open_terminal "drone" "Drone (ROS 2)" \
+        "/DroneSimEnv/drone_ws"
+    open_terminal "simulation" "Simulation (PX4)" \
+        "/DroneSimEnv/simulation_ws"
     open_terminal "ground" "Ground (QGC)" \
         "/DroneSimEnv/ground_ws"
 

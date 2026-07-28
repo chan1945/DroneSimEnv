@@ -84,13 +84,13 @@ RUN make px4_sitl
 ###############################################################
 # workspace setup
 ###############################################################
-COPY Drone_sim/drone_sim_ws/src /DroneSimEnv/drone_sim_ws/src
-WORKDIR /DroneSimEnv/drone_sim_ws
+COPY simulation/simulation_ws/src /DroneSimEnv/simulation_ws/src
+WORKDIR /DroneSimEnv/simulation_ws
 RUN source /opt/ros/humble/setup.bash && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     colcon build --symlink-install && \
-    echo "source /DroneSimEnv/drone_sim_ws/install/setup.bash" >> /root/.bashrc
+    echo "source /DroneSimEnv/simulation_ws/install/setup.bash" >> /root/.bashrc
 
 ###############################################################
 # finalize

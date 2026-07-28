@@ -97,7 +97,7 @@ ENV QT_X11_NO_MITSHM=1
 ###############################################################
 # workspace setup
 ###############################################################
-COPY Ground/ground_ws/src /DroneSimEnv/ground_ws/src
+COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
 # for running entrypoint script with gosu
 COPY Docker/ground-entrypoint.sh /usr/local/bin/ground-entrypoint
 

@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # These are the names Docker gives to the finished images.
-DRONE_SIM_IMAGE="dronesimenv/drone_sim:latest"
-COMPANION_IMAGE="dronesimenv/companion:latest"
+SIMULATION_IMAGE="dronesimenv/simulation:latest"
+DRONE_IMAGE="dronesimenv/drone:latest"
 GROUND_IMAGE="dronesimenv/ground:latest"
 
 usage() {
@@ -20,8 +20,8 @@ Usage:
   $0 --help
 
 Builds these images:
-  ${DRONE_SIM_IMAGE}
-  ${COMPANION_IMAGE}
+  ${SIMULATION_IMAGE}
+  ${DRONE_IMAGE}
   ${GROUND_IMAGE}
 EOF
 }
@@ -68,8 +68,8 @@ main() {
     esac
 
     require_docker
-    build_image "drone_sim" "${DRONE_SIM_IMAGE}" "Dockerfile.drone_sim"
-    build_image "companion" "${COMPANION_IMAGE}" "Dockerfile.companion"
+    build_image "simulation" "${SIMULATION_IMAGE}" "Dockerfile.simulation"
+    build_image "drone" "${DRONE_IMAGE}" "Dockerfile.drone"
     build_image "ground" "${GROUND_IMAGE}" "Dockerfile.ground"
     echo "All DroneSimEnv images are ready."
 }

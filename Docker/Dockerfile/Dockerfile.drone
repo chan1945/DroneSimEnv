@@ -85,15 +85,15 @@ RUN apt-get install -y ros-humble-ros-gzharmonic
 ###############################################################
 # workspace setup
 ###############################################################
-COPY Companion/companion_ws/src /DroneSimEnv/companion_ws/src
+COPY drone/drone_ws/src /DroneSimEnv/drone_ws/src
 
-WORKDIR /DroneSimEnv/companion_ws
+WORKDIR /DroneSimEnv/drone_ws
 
 RUN source /opt/ros/humble/setup.bash && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     colcon build --symlink-install && \
-    echo "source /DroneSimEnv/companion_ws/install/setup.bash" >> /root/.bashrc
+    echo "source /DroneSimEnv/drone_ws/install/setup.bash" >> /root/.bashrc
 
 ###############################################################
 # finalize
