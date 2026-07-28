@@ -16,59 +16,24 @@ git clone --recurse-submodules https://github.com/chan1945/DroneSimEnv.git
 ```
 ### Build images and run containers
 
-#### Ubuntu
+Ubuntu and WSL2 use the same commands. `sim_run.sh` detects WSL2 by itself and
+uses its graphics settings automatically.
+
 ```bash
 cd DroneSimEnv/Docker
 ./sim_build.sh
-./sim_run.sh up
+./sim_run.sh
 ```
 
-#### WSL2 (Windows)
-```bash
-cd DroneSimEnv/Docker
-./sim_build.sh
-./sim_run.sh up
-```
-
-The build script creates the Docker images. The `up` command then starts the three containers in the background and opens terminal windows for:
+The build script creates the Docker images. The run script then starts the three
+containers in the background and opens terminal windows for:
 - `companion`
 - `drone_sim`
 - `ground`
 
-### Container management commands
-
-Ubuntu:
-```bash
-cd DroneSimEnv/Docker
-
-./sim_run.sh up
-./sim_run.sh logs
-./sim_run.sh shell companion
-./sim_run.sh shell drone_sim
-./sim_run.sh shell ground
-./sim_run.sh stop
-./sim_run.sh down
-```
-
-WSL2:
-```bash
-cd DroneSimEnv/Docker
-
-./sim_run.sh up
-./sim_run.sh logs
-./sim_run.sh shell companion
-./sim_run.sh shell drone_sim
-./sim_run.sh shell ground
-./sim_run.sh stop
-./sim_run.sh down
-```
-
-Command behavior:
-- `up`: start containers in detached mode (run `./sim_build.sh` first)
-- `logs`: follow container logs; pressing `Ctrl+C` stops log viewing only
-- `shell <service>`: open an interactive shell inside `companion`, `drone_sim`, or `ground`
-- `stop`: stop containers while keeping them
-- `down`: stop and remove containers
+Keep the original terminal window open while using the new shell windows. Press
+any key in the original window to stop and remove all three containers. Pressing
+`Ctrl+C` also removes them.
 
 ## Included Software
 ```

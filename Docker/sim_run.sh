@@ -2,62 +2,59 @@
 
 # Create and run the PX4 simulator containers.
 # Build the images first with ./sim_build.sh.
-# This file never builds images, so starting and building stay separate.
+# Pressing any key in this window removes the containers again.
 set -euo pipefail
 
 # Find the Docker folder and the top folder of this project.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Keep these names in one place so every command manages the same containers.
+# Keep these names in one place so cleanup only removes this project's containers.
 SERVICES=("companion" "drone_sim" "ground")
 DRONE_SIM_IMAGE="dronesimenv/drone_sim:latest"
 COMPANION_IMAGE="dronesimenv/companion:latest"
 GROUND_IMAGE="dronesimenv/ground:latest"
+# These flags stop cleanup from running too early or running twice.
+CLEANUP_DONE=false
+CLEANUP_ENABLED=false
 
 is_wsl2() {
     # WSL2 writes the word "microsoft" in this system file.
     grep -qi microsoft /proc/version 2>/dev/null
 }
 
-usage() {
-    cat <<EOF
-Usage:
-  $0 up [--no-terminal]
-  $0 stop
-  $0 down
-  $0 logs [service]
-  $0 shell <service>
-  $0 status
+configure_wsl2_terminal() {
+    # WSL2 needs a terminal app before this script can open shell windows.
+    # It also needs these fonts so normal text and emoji look correct.
+    if command -v xfce4-terminal >/dev/null 2>&1 && \
+        dpkg -s fonts-noto-cjk >/dev/null 2>&1 && \
+        dpkg -s fonts-noto-color-emoji >/dev/null 2>&1; then
+        return
+    fi
 
-Services:
-  companion
-  drone_sim
-  ground
+    echo "Installing the WSL2 terminal app and fonts..."
+    echo "Your password may be needed to install these packages."
+    sudo apt-get update
+    sudo apt-get install -y \
+        xfce4-terminal \
+        dbus-x11 \
+        fonts-noto-cjk \
+        fonts-noto-color-emoji
 
-Commands:
-  up                      Recreate and start the three containers.
-  up --no-terminal        Do not open terminal windows after starting.
-  stop                    Stop containers but keep them.
-  down                    Stop and remove this project's containers.
-  logs [service]          Follow logs for one service or all services.
-  shell <service>         Open bash inside a running container.
-  status                  Show this project's container status.
-EOF
+    # Rebuild the font list so new terminal windows can use the new fonts.
+    if command -v fc-cache >/dev/null 2>&1; then
+        fc-cache -fv >/dev/null 2>&1
+    fi
 }
 
-is_valid_service() {
-    local service="$1"
-    local candidate
-
-    for candidate in "${SERVICES[@]}"; do
-        [[ "${candidate}" == "${service}" ]] && return 0
-    done
-
-    return 1
+configure_wsl2_locale() {
+    # Tell terminal programs to use the common UTF-8 text format.
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
 }
 
 require_docker() {
+    # Stop early when Docker is missing or cannot be used.
     command -v docker >/dev/null 2>&1 || {
         echo "ERROR: Docker is not installed or is not on PATH." >&2
         exit 1
@@ -72,11 +69,6 @@ require_docker() {
 container_exists() {
     # Docker returns success only when a container with this exact name exists.
     docker container inspect "$1" >/dev/null 2>&1
-}
-
-container_is_running() {
-    # Ask Docker for a simple true or false answer.
-    [[ "$(docker container inspect --format '{{.State.Running}}' "$1")" == "true" ]]
 }
 
 require_images() {
@@ -98,10 +90,35 @@ remove_project_containers() {
     for service in "${SERVICES[@]}"; do
         if container_exists "${service}"; then
             # Only these three exact names belong to this script.
-            echo "Removing old ${service} container..."
+            echo "Removing ${service} container..."
             docker rm --force "${service}" >/dev/null
         fi
     done
+}
+
+cleanup() {
+    local exit_code="$?"
+    local service
+
+    # There is nothing to remove before the script starts changing containers.
+    [[ "${CLEANUP_ENABLED}" == true ]] || exit "${exit_code}"
+
+    # Run this only once, even when a signal and EXIT happen together.
+    [[ "${CLEANUP_DONE}" == true ]] && exit "${exit_code}"
+    CLEANUP_DONE=true
+    trap - EXIT INT TERM
+
+    echo
+    echo "Stopping and removing DroneSimEnv containers..."
+    for service in "${SERVICES[@]}"; do
+        if container_exists "${service}"; then
+            # --force stops the container first, then removes this exact name.
+            docker rm --force "${service}" >/dev/null 2>&1 || \
+                echo "WARNING: Could not remove ${service}." >&2
+        fi
+    done
+    echo "DroneSimEnv containers are down."
+    exit "${exit_code}"
 }
 
 configure_x11_access() {
@@ -181,31 +198,29 @@ open_terminal() {
             --title="${title}" \
             -- bash -c "docker exec -it ${service} /bin/bash" &
     else
-        echo "Container '${service}' is running. Open it with: $0 shell ${service}"
+        echo "Container '${service}' is running, but no terminal app was found."
     fi
 }
 
-command_up() {
-    local terminals=true
+main() {
+    # This script has no commands or options. It always starts all containers.
+    if [[ "$#" -ne 0 ]]; then
+        echo "ERROR: sim_run.sh does not accept commands or options." >&2
+        echo "Usage: $0" >&2
+        exit 1
+    fi
 
-    while [[ "$#" -gt 0 ]]; do
-        case "$1" in
-            --no-terminal) terminals=false ;;
-            *)
-                echo "ERROR: unknown up option: $1" >&2
-                usage >&2
-                exit 1
-                ;;
-        esac
-        shift
-    done
-
-    # Check everything before deleting old containers and making new ones.
     require_docker
     require_images
+    if is_wsl2; then
+        configure_wsl2_terminal
+        configure_wsl2_locale
+    fi
     configure_x11_access
-    remove_project_containers
 
+    # Delete only old project containers before making fresh ones.
+    CLEANUP_ENABLED=true
+    remove_project_containers
     run_service "drone_sim" "${DRONE_SIM_IMAGE}" \
         "${PROJECT_ROOT}/Drone_sim/drone_sim_ws/src" \
         "/DroneSimEnv/drone_sim_ws/src"
@@ -216,123 +231,21 @@ command_up() {
         "${PROJECT_ROOT}/Companion/companion_ws/src" \
         "/DroneSimEnv/companion_ws/src"
 
-    echo "DroneSimEnv is running."
-    if [[ "${terminals}" == true ]]; then
-        open_terminal "companion" "Companion (ROS 2)"
-        open_terminal "drone_sim" "Drone Sim (PX4)"
-        open_terminal "ground" "Ground (QGC)"
+    # Give Docker a moment before the new shell windows try to enter containers.
+    sleep 3
+    open_terminal "companion" "Companion (ROS 2)"
+    open_terminal "drone_sim" "Drone Sim (PX4)"
+    open_terminal "ground" "Ground (QGC)"
+
+    echo "DroneSimEnv is running. Press any key in this window to stop it."
+    if ! IFS= read -r -n 1 -s; then
+        echo "Input closed. Stopping containers."
     fi
 }
 
-command_stop() {
-    local service
-
-    require_docker
-    # Stopping keeps the container so it can be inspected later.
-    for service in "${SERVICES[@]}"; do
-        if container_exists "${service}"; then
-            if container_is_running "${service}"; then
-                echo "Stopping ${service}..."
-                docker stop "${service}" >/dev/null
-            else
-                echo "${service} is already stopped."
-            fi
-        fi
-    done
-}
-
-command_down() {
-    # Down removes containers, but never removes images or project files.
-    require_docker
-    remove_project_containers
-}
-
-command_logs() {
-    local service
-    local -a log_pids=()
-
-    require_docker
-    if [[ "$#" -eq 1 ]]; then
-        is_valid_service "$1" || {
-            echo "ERROR: unknown service: $1" >&2
-            exit 1
-        }
-        docker logs --follow "$1"
-        return
-    fi
-
-    if [[ "$#" -ne 0 ]]; then
-        echo "ERROR: logs accepts zero or one service name." >&2
-        exit 1
-    fi
-
-    # Start one log reader per container and add its name to every log line.
-    for service in "${SERVICES[@]}"; do
-        if container_exists "${service}"; then
-            docker logs --follow "${service}" 2>&1 | sed -u "s/^/[${service}] /" &
-            log_pids+=("$!")
-        fi
-    done
-
-    [[ "${#log_pids[@]}" -gt 0 ]] || {
-        echo "ERROR: no DroneSimEnv containers exist." >&2
-        exit 1
-    }
-
-    trap 'kill "${log_pids[@]}" 2>/dev/null || true' INT TERM
-    wait "${log_pids[@]}" || true
-}
-
-command_shell() {
-    [[ "$#" -eq 1 ]] || {
-        echo "ERROR: shell requires exactly one service name." >&2
-        exit 1
-    }
-    is_valid_service "$1" || {
-        echo "ERROR: unknown service: $1" >&2
-        exit 1
-    }
-
-    require_docker
-    docker exec -it "$1" /bin/bash
-}
-
-command_status() {
-    local service
-
-    require_docker
-    # Show a row even for a container that has not been created yet.
-    for service in "${SERVICES[@]}"; do
-        if container_exists "${service}"; then
-            docker container inspect \
-                --format '{{.Name}}\t{{.Config.Image}}\t{{.State.Status}}' \
-                "${service}"
-        else
-            printf '%s\t%s\t%s\n' "${service}" "-" "not created"
-        fi
-    done
-}
-
-main() {
-    local command="${1:-}"
-    if [[ -n "${command}" ]]; then
-        shift
-    fi
-
-    case "${command}" in
-        up) command_up "$@" ;;
-        stop) [[ "$#" -eq 0 ]] || { usage >&2; exit 1; }; command_stop ;;
-        down) [[ "$#" -eq 0 ]] || { usage >&2; exit 1; }; command_down ;;
-        logs) command_logs "$@" ;;
-        shell) command_shell "$@" ;;
-        status) [[ "$#" -eq 0 ]] || { usage >&2; exit 1; }; command_status ;;
-        -h|--help|help) usage ;;
-        *)
-            [[ -n "${command}" ]] && echo "ERROR: unknown command: ${command}" >&2
-            usage >&2
-            exit 1
-            ;;
-    esac
-}
+# Clean up after a key press, Ctrl+C, termination, or an unexpected error.
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 main "$@"
