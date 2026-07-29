@@ -1,0 +1,13 @@
+# Keep Git history and local agent files out of Docker build uploads.
+.git
+.agents
+.codex
+
+# ROS 2 build output is made inside Docker and should not break the cache.
+**/build
+**/install
+**/log
+
+# Editor and operating-system files are not needed inside images.
+.DS_Store
+*.swp

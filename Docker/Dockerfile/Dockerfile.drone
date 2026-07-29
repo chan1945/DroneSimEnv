@@ -1,102 +1,112 @@
-# Base Image 
-FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
+# These values are also used as Docker image tags in scripts/sim_build.sh.
+# from NGC catalog
+ARG CUDA_IMAGE=nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
+ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
-#  not to ask for user input during package installation
+
+########################################################################
+# base image and basic tools
+########################################################################
+# This stage contains tools that every DroneSimEnv container needs.
+FROM ${CUDA_IMAGE} AS base_amd64
+
+# Do not ask questions while packages are being installed.
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
-# Install basic packages
-# tmux keeps a service shell running after its xterm window closes.
-RUN apt-get update && apt-get install -y \
-    git \
-    wget \
-    curl \
-    cmake \
+# Install shared command-line tools only once.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    python3-pip \
-    tmux \
-    sudo \
-    tzdata \
-    lsb-release \
-    software-properties-common \
-    locales \
+    cmake \
+    curl \
+    git \
     gnupg2 \
+    locales \
+    lsb-release \
+    python3-pip \
+    software-properties-common \
+    sudo \
+    tmux \
+    tzdata \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 
-###############################################################
-# Micro-XRCE-DDS-Agent v2.4.3 
-###############################################################
-WORKDIR /DroneSimEnv
-RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
-WORKDIR /DroneSimEnv/Micro-XRCE-DDS-Agent/build
+########################################################################
+# Install ROS 2 Humble
+########################################################################
+# This stage adds ROS 2 Humble to the shared base image.
+FROM base_amd64 AS ros2_humble
 
-RUN cmake .. \
-    && make -j$(nproc) \
-    && make install \
+# Use UTF-8 text so ROS 2 tools and terminals can handle normal characters.
+RUN locale-gen en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Add the official ROS 2 package source, then install ROS 2 and build tools.
+RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+        > /etc/apt/sources.list.d/ros2.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ros-dev-tools \
+        ros-humble-ament-cmake-clang-format \
+        ros-humble-bondcpp \
+        ros-humble-desktop \
+        ros-humble-vision-msgs \
+    && rm -rf /var/lib/apt/lists/* \
+    && rosdep init \
+    && rosdep update \
+    && echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+
+
+########################################################################
+# Install DDS
+#########################################################################
+# Use the tagged shared ROS image. Build it first with sim_build.sh.
+FROM ${ROS2_HUMBLE_IMAGE} AS ros2-dds
+
+SHELL ["/bin/bash", "-c"]
+
+# Build the DDS agent that connects PX4 messages to ROS 2.
+WORKDIR /DroneSimEnv
+RUN git clone --branch v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git \
+    && cmake -S /DroneSimEnv/Micro-XRCE-DDS-Agent -B /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
+    && cmake --build /DroneSimEnv/Micro-XRCE-DDS-Agent/build --parallel "$(nproc)" \
+    && cmake --install /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
     && ldconfig \
     && rm -rf /DroneSimEnv/Micro-XRCE-DDS-Agent
 
-###############################################################
-# ROS 2 Humble 
-###############################################################
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        locales \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN locale-gen en_US en_US.UTF-8
-RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-ENV LANG=en_US.UTF-8
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        software-properties-common curl \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu \
-    $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        ros-humble-desktop ros-dev-tools \
-        ros-humble-bondcpp ros-humble-ament-cmake-clang-format \
-        ros-humble-vision-msgs \
-    && apt clean \
+
+########################################################################
+# Install gz_bridge
+#########################################################################
+FROM ros2-dds AS ros2-dds-gzbridge
+# Install Gazebo Harmonic support used by the drone service.
+RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
+        -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/gazebo-stable.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ros-humble-ros-gzharmonic \
     && rm -rf /var/lib/apt/lists/*
 
-RUN rosdep init
 
-RUN rosdep update && \
-    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
-
-###############################################################
-# ros-humble-ros-gzharmonic 
-###############################################################
-RUN apt-get update
-RUN apt-get install -y curl lsb-release gnupg
-
-
-RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
-RUN apt-get update
-
-RUN apt-get install -y ros-humble-ros-gzharmonic
-
-###############################################################
-# workspace setup
-###############################################################
+########################################################################
+# Install gz_bridge
+#########################################################################
+FROM ros2-dds-gzbridge AS drone
+# Copy and build only this service's ROS 2 workspace.
 COPY drone/drone_ws/src /DroneSimEnv/drone_ws/src
-
 WORKDIR /DroneSimEnv/drone_ws
+RUN source /opt/ros/humble/setup.bash \
+    && apt-get update \
+    && rosdep install --from-paths src --ignore-src -r -y \
+    && colcon build --symlink-install \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "source /DroneSimEnv/drone_ws/install/setup.bash" >> /root/.bashrc
 
-RUN source /opt/ros/humble/setup.bash && \
-    apt-get update && \
-    rosdep install --from-paths src --ignore-src -r -y && \
-    colcon build --symlink-install && \
-    echo "source /DroneSimEnv/drone_ws/install/setup.bash" >> /root/.bashrc
-
-###############################################################
-# finalize
-###############################################################
 WORKDIR /DroneSimEnv
 CMD ["/bin/bash"]

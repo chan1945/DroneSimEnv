@@ -11,9 +11,11 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Keep these names in one place so cleanup only removes this project's containers.
 SERVICES=("simulation" "drone" "ground")
-SIMULATION_IMAGE="dronesimenv/simulation:latest"
-DRONE_IMAGE="dronesimenv/drone:latest"
-GROUND_IMAGE="dronesimenv/ground:latest"
+# These tags must match the images made by sim_build.sh.
+CUDA_VERSION="13.3.0"
+SIMULATION_IMAGE="dronesimenv/simulation:cuda${CUDA_VERSION}"
+DRONE_IMAGE="dronesimenv/drone:cuda${CUDA_VERSION}"
+GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
 # These flags stop cleanup from running too early or running twice.
 CLEANUP_DONE=false
 CLEANUP_ENABLED=false

@@ -33,8 +33,11 @@ cd DroneSimEnv
 ./scripts/sim_run.sh
 ```
 
-The build script creates the Docker images. The run script then starts the three
-containers in the background and opens one `xterm` window for each service:
+The build script first creates shared CUDA and ROS 2 images. It then creates the
+three service images from the shared ROS 2 image. This lets Docker reuse the
+slow ROS 2 installation layer when only one service changes. The run script
+starts the three containers in the background and opens one `xterm` window for
+each service:
 - `drone`
 - `simulation`
 - `ground`
@@ -80,5 +83,23 @@ drone
 ├─Micro XRCE DDS Agent v2.4.3
 ```
 
-## !!warning!!
-DroneSimEnv uses the nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 image as its base image to ensure that the implemented code remains compatible with the actual hardware platform, the Jetson Orin Nano, which supports CUDA 12.6.
+## Image architecture
+
+All images use CUDA 13.3.0. `sim_build.sh` builds them in this order:
+
+```text
+nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
+└─ dronesimenv/base_amd64:cuda13.3.0
+   └─ dronesimenv/ros2_humble:cuda13.3.0-humble
+      ├─ dronesimenv/drone:cuda13.3.0
+      ├─ dronesimenv/simulation:cuda13.3.0
+      └─ dronesimenv/ground:cuda13.3.0
+```
+
+Run `./scripts/sim_build.sh` again after changing a Dockerfile. Docker reuses
+unchanged layers, so later builds are faster.
+
+## CUDA requirement
+
+The host NVIDIA driver and NVIDIA Container Toolkit must support CUDA 13.3.0.
+Check this requirement before building or running DroneSimEnv.

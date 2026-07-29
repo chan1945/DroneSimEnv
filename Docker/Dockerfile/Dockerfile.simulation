@@ -1,100 +1,35 @@
-# Base Image
-FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
+# Build this image from the shared CUDA 13.3.0 and ROS 2 Humble image.
+ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
+FROM ${ROS2_HUMBLE_IMAGE}
 
-# not to ask for user input during package installation
-ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
-# Install basic packages
-# tmux keeps a service shell running after its xterm window closes.
-RUN apt-get update && apt-get install -y \
-    git \
-    wget \
-    curl \
-    cmake \
-    build-essential \
-    python3-pip \
-    tmux \
-    sudo \
-    tzdata \
-    lsb-release \
-    software-properties-common \
-    locales \
-    gnupg2 \
-    && rm -rf /var/lib/apt/lists/*
-
-
-###############################################################
-# ROS 2 Humble 
-###############################################################
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        locales \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN locale-gen en_US en_US.UTF-8
-RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-ENV LANG=en_US.UTF-8
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        software-properties-common curl \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu \
-    $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        ros-humble-desktop ros-dev-tools \
-        ros-humble-bondcpp ros-humble-ament-cmake-clang-format \
-        ros-humble-vision-msgs \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN rosdep init
-
-RUN rosdep update && \
-    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
-
-###############################################################
-# PX4 source code download and build
-###############################################################
+# Download PX4 and its source dependencies for the simulator.
 WORKDIR /DroneSimEnv
-
-# px4 source code download
-RUN git clone https://github.com/PX4/PX4-Autopilot.git --recursive --branch v1.16.1 /DroneSimEnv/PX4-Autopilot
+RUN git clone --recursive --branch v1.16.1 \
+        https://github.com/PX4/PX4-Autopilot.git /DroneSimEnv/PX4-Autopilot
 
 WORKDIR /DroneSimEnv/PX4-Autopilot
 
-# PX4 build and simulation setup
+# Install the packages PX4 needs, then make its helper tools available.
 RUN bash ./Tools/setup/ubuntu.sh
+ENV PATH="/root/.local/bin:${PATH}"
 
-ENV PATH="/root/.local/bin:$PATH"
-
-# For GUI applications
+# This helps GUI programs share an X11 display with the host.
 ENV QT_X11_NO_MITSHM=1
 
-###############################################################
-# PX4 SITL build
-###############################################################
-WORKDIR /DroneSimEnv/PX4-Autopilot
+# Build PX4 SITL once while the Docker image is being made.
 RUN make px4_sitl
 
-
-###############################################################
-# workspace setup
-###############################################################
+# Copy and build only this service's ROS 2 workspace.
 COPY simulation/simulation_ws/src /DroneSimEnv/simulation_ws/src
 WORKDIR /DroneSimEnv/simulation_ws
-RUN source /opt/ros/humble/setup.bash && \
-    apt-get update && \
-    rosdep install --from-paths src --ignore-src -r -y && \
-    colcon build --symlink-install && \
-    echo "source /DroneSimEnv/simulation_ws/install/setup.bash" >> /root/.bashrc
+RUN source /opt/ros/humble/setup.bash \
+    && apt-get update \
+    && rosdep install --from-paths src --ignore-src -r -y \
+    && colcon build --symlink-install \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "source /DroneSimEnv/simulation_ws/install/setup.bash" >> /root/.bashrc
 
-###############################################################
-# finalize
-###############################################################
 WORKDIR /DroneSimEnv/PX4-Autopilot
-
-CMD [ "/bin/bash" ]
+CMD ["/bin/bash"]

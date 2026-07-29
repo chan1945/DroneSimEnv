@@ -1,63 +1,19 @@
-# Base Image
-FROM nvcr.io/nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
+# Build this image from the shared CUDA 13.3.0 and ROS 2 Humble image.
+ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
+FROM ${ROS2_HUMBLE_IMAGE}
 
-# not to ask for user input during package installation
-ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
-# Install basic packages
-# tmux keeps a service shell running after its xterm window closes.
-RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
-    sudo \
-    vim \
-    ruby \
-    python3-pip \
-    tmux \
-    mesa-utils \
-    net-tools \
-    gosu \                
-    && rm -rf /var/lib/apt/lists/*
-    
-###############################################################
-# ROS 2 Humble
-###############################################################
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        locales \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN locale-gen en_US en_US.UTF-8
-RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-ENV LANG=en_US.UTF-8
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        software-properties-common curl \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu \
-    $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
-RUN apt update \
-    && apt install -y --no-install-recommends \
-        ros-humble-desktop ros-dev-tools \
-        ros-humble-bondcpp ros-humble-ament-cmake-clang-format \
-        ros-humble-vision-msgs \
-    && apt clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN rosdep init
-
-RUN rosdep update && \
-    echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
-###############################################################
-# QGroundControl AppImage dependencies
-###############################################################
-# Package dependencies for QGC AppImage
-RUN apt-get update && apt-get install -y \
-    libxcb-xinerama0 \
-    libxkbcommon-x11-0 \
+# Install tools and libraries used only by the ground station.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gosu \
+    gstreamer1.0-gl \
+    gstreamer1.0-libav \
+    gstreamer1.0-plugins-bad \
+    libfuse2 \
+    libpulse-mainloop-glib0 \
+    libqt5gui5 \
+    libx11-xcb1 \
     libxcb-cursor0 \
     libxcb-glx0 \
     libxcb-icccm4 \
@@ -67,75 +23,66 @@ RUN apt-get update && apt-get install -y \
     libxcb-render-util0 \
     libxcb-shape0 \
     libxcb-sync1 \
-    libxcb-xfixes0 \
-    libx11-xcb1 \
-    libqt5gui5 \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-libav \
-    gstreamer1.0-gl \
-    libfuse2 \
-    libpulse-mainloop-glib0 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    mesa-utils \
+    net-tools \
+    ruby \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
-# QGC as qgcuser
+# Run QGroundControl as a regular user instead of root.
 WORKDIR /
-RUN useradd -m -s /bin/bash qgcuser
-RUN usermod -aG dialout qgcuser
+RUN useradd -m -s /bin/bash qgcuser \
+    && usermod -aG dialout qgcuser
 
-# QGC latest AppImage
-RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
+# Download and unpack QGroundControl so the container can run it directly.
+RUN wget -q https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
     && chmod +x QGroundControl-x86_64.AppImage \
     && ./QGroundControl-x86_64.AppImage --appimage-extract \
-    && rm QGroundControl-x86_64.AppImage
+    && rm QGroundControl-x86_64.AppImage \
+    && ln -s /squashfs-root/AppRun /usr/local/bin/qgc
 
-# symlink for easy execution (qgc)
-RUN ln -s /squashfs-root/AppRun /usr/local/bin/qgc
-
-# For GUI applications
+# This helps GUI programs share an X11 display with the host.
 ENV QT_X11_NO_MITSHM=1
 
-###############################################################
-# workspace setup
-###############################################################
+# Copy and build only this service's ROS 2 workspace.
 COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
-
 WORKDIR /DroneSimEnv/ground_ws
-RUN source /opt/ros/humble/setup.bash && \
-    apt-get update && \
-    rosdep install --from-paths src --ignore-src -r -y && \
-    colcon build --symlink-install && \
-    echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
+RUN source /opt/ros/humble/setup.bash \
+    && apt-get update \
+    && rosdep install --from-paths src --ignore-src -r -y \
+    && colcon build --symlink-install \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
 
-################################################################
-# finalize
-################################################################
 WORKDIR /DroneSimEnv/ground_ws
 # Start QGroundControl when a GUI display is available.
 # Keep the container alive so sim_run.sh can open a tmux shell inside it.
 # Stop child processes safely when Docker asks the container to exit.
-CMD ["/bin/bash", "-lc", "set -Eeuo pipefail; \
-QGC_PID=''; \
-KEEPALIVE_PID=''; \
-cleanup() { \
-    if [[ -n \"${QGC_PID}\" ]] && kill -0 \"${QGC_PID}\" 2>/dev/null; then \
-        kill \"${QGC_PID}\" 2>/dev/null || true; \
-        wait \"${QGC_PID}\" 2>/dev/null || true; \
-    fi; \
-    if [[ -n \"${KEEPALIVE_PID}\" ]] && kill -0 \"${KEEPALIVE_PID}\" 2>/dev/null; then \
-        kill \"${KEEPALIVE_PID}\" 2>/dev/null || true; \
-        wait \"${KEEPALIVE_PID}\" 2>/dev/null || true; \
-    fi; \
-}; \
-trap cleanup EXIT; \
-trap 'exit 0' INT TERM; \
-if [[ -n \"${DISPLAY:-}\" || -n \"${WAYLAND_DISPLAY:-}\" ]]; then \
-    echo 'Starting QGroundControl...'; \
-    gosu qgcuser env HOME=/home/qgcuser DISPLAY=\"${DISPLAY:-}\" WAYLAND_DISPLAY=\"${WAYLAND_DISPLAY:-}\" XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-}\" PULSE_SERVER=\"${PULSE_SERVER:-}\" QT_X11_NO_MITSHM=\"${QT_X11_NO_MITSHM:-1}\" qgc >/tmp/qgc.log 2>&1 & \
-    QGC_PID=$!; \
-    echo 'QGroundControl started. Logs: /tmp/qgc.log'; \
-else \
-    echo 'Skipping QGroundControl startup because no GUI display variables are set.'; \
-fi; \
-tail -f /dev/null & \
-KEEPALIVE_PID=$!; \
+CMD ["/bin/bash", "-lc", "set -Eeuo pipefail; \\
+QGC_PID=''; \\
+KEEPALIVE_PID=''; \\
+cleanup() { \\
+    if [[ -n \"${QGC_PID}\" ]] && kill -0 \"${QGC_PID}\" 2>/dev/null; then \\
+        kill \"${QGC_PID}\" 2>/dev/null || true; \\
+        wait \"${QGC_PID}\" 2>/dev/null || true; \\
+    fi; \\
+    if [[ -n \"${KEEPALIVE_PID}\" ]] && kill -0 \"${KEEPALIVE_PID}\" 2>/dev/null; then \\
+        kill \"${KEEPALIVE_PID}\" 2>/dev/null || true; \\
+        wait \"${KEEPALIVE_PID}\" 2>/dev/null || true; \\
+    fi; \\
+}; \\
+trap cleanup EXIT; \\
+trap 'exit 0' INT TERM; \\
+if [[ -n \"${DISPLAY:-}\" || -n \"${WAYLAND_DISPLAY:-}\" ]]; then \\
+    echo 'Starting QGroundControl...'; \\
+    gosu qgcuser env HOME=/home/qgcuser DISPLAY=\"${DISPLAY:-}\" WAYLAND_DISPLAY=\"${WAYLAND_DISPLAY:-}\" XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-}\" PULSE_SERVER=\"${PULSE_SERVER:-}\" QT_X11_NO_MITSHM=\"${QT_X11_NO_MITSHM:-1}\" qgc >/tmp/qgc.log 2>&1 & \\
+    QGC_PID=$!; \\
+    echo 'QGroundControl started. Logs: /tmp/qgc.log'; \\
+else \\
+    echo 'Skipping QGroundControl startup because no GUI display variables are set.'; \\
+fi; \\
+tail -f /dev/null & \\
+KEEPALIVE_PID=$!; \\
 wait \"${KEEPALIVE_PID}\""]
