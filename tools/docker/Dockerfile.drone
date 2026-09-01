@@ -1,4 +1,4 @@
-# These values are also used as Docker image tags in scripts/sim_build.sh.
+# These values are also used as Docker image tags in tools/sim_build.sh.
 # from NGC catalog
 ARG CUDA_IMAGE=nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble

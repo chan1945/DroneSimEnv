@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # Create and run the PX4 simulator containers.
-# Build the images first with ./scripts/sim_build.sh.
+# Build the images first with ./tools/sim_build.sh.
 # Pressing any key in this window removes the containers again.
 set -euo pipefail
 
-# Find the scripts folder and the top folder of this project.
+# Find the tools folder and the top folder of this project.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 

@@ -29,8 +29,8 @@ uses its graphics settings automatically.
 
 ```bash
 cd DroneSimEnv
-./scripts/sim_build.sh
-./scripts/sim_run.sh
+./tools/sim_build.sh
+./tools/sim_run.sh
 ```
 
 The build script first creates shared CUDA and ROS 2 images. It then creates the
@@ -96,7 +96,7 @@ nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
       └─ dronesimenv/ground:cuda13.3.0
 ```
 
-Run `./scripts/sim_build.sh` again after changing a Dockerfile. Docker reuses
+Run `./tools/sim_build.sh` again after changing a Dockerfile. Docker reuses
 unchanged layers, so later builds are faster.
 
 ## CUDA requirement
