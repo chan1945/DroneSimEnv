@@ -72,8 +72,8 @@ SHELL ["/bin/bash", "-c"]
 
 # Build the DDS agent that connects PX4 messages to ROS 2.
 WORKDIR /DroneSimEnv
-RUN git clone --branch v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git \
-    && cmake -S /DroneSimEnv/Micro-XRCE-DDS-Agent -B /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
+COPY tools/_git_clones/Micro-XRCE-DDS-Agent /DroneSimEnv/Micro-XRCE-DDS-Agent
+RUN cmake -S /DroneSimEnv/Micro-XRCE-DDS-Agent -B /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
     && cmake --build /DroneSimEnv/Micro-XRCE-DDS-Agent/build --parallel "$(nproc)" \
     && cmake --install /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
     && ldconfig \
@@ -100,6 +100,8 @@ RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
 FROM ros2-dds-gzbridge AS drone
 # Copy and build only this service's ROS 2 workspace.
 COPY drone/drone_ws/src /DroneSimEnv/drone_ws/src
+# Add the cached PX4 ROS message package before building the workspace.
+COPY tools/_git_clones/px4_msgs /DroneSimEnv/drone_ws/src/px4_msgs
 WORKDIR /DroneSimEnv/drone_ws
 RUN source /opt/ros/humble/setup.bash \
     && apt-get update \

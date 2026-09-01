@@ -2,3 +2,9 @@
 build/
 install/
 log/
+
+# sim_build.sh downloads these large external sources on the local machine.
+tools/_git_clones/
+
+# prompt for agent
+tools/prompt.md

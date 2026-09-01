@@ -3,6 +3,10 @@
 .agents
 .codex
 
+# Keep cache Git metadata out of Docker while still sending cached source files.
+tools/_git_clones/**/.git
+tools/_git_clones/**/.git/**
+
 # ROS 2 build output is made inside Docker and should not break the cache.
 **/build
 **/install

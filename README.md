@@ -5,6 +5,8 @@
 - NVIDIA Container Toolkit — required to use the GPU inside Docker containers
   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 - xterm — opens a terminal window on the Ubuntu GNOME or WSL2 host
+- Git — downloads the cached external source code before Docker builds images
+- Network access — needed when the external source cache is first created
 
 Install xterm before running the project:
 
@@ -33,11 +35,17 @@ cd DroneSimEnv
 ./tools/sim_run.sh
 ```
 
-The build script first creates shared CUDA and ROS 2 images. It then creates the
-three service images from the shared ROS 2 image. This lets Docker reuse the
-slow ROS 2 installation layer when only one service changes. The run script
-starts the three containers in the background and opens one `xterm` window for
-each service:
+The build script first prepares external Git sources in `tools/_git_clones`.
+It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and
+Micro-XRCE-DDS-Agent v2.4.3. Later builds reuse valid cached copies and only
+download a requested ref when that cache does not have it. Do not edit files in
+this folder; the script stops rather than overwriting unexpected changes.
+
+The build script then creates shared CUDA and ROS 2 images. It creates the
+three service images from the shared ROS 2 image and copies the prepared source
+files into the needed images. This lets Docker reuse the slow ROS 2 installation
+layer when only one service changes. The run script starts the three containers
+in the background and opens one `xterm` window for each service:
 - `drone`
 - `simulation`
 - `ground`
@@ -72,7 +80,7 @@ docker exec -it ground cat /tmp/qgc.log
 ## Included Software
 ```
 simulation
-├─PX4 v1.16.1
+├─PX4 v1.16.2
 ├─Gazebo Harmonic
 
 ground
@@ -80,6 +88,7 @@ ground
 
 drone
 ├─ROS2 Humble
+├─px4_msgs release/1.16
 ├─Micro XRCE DDS Agent v2.4.3
 ```
 

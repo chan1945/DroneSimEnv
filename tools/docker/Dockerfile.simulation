@@ -4,10 +4,9 @@ FROM ${ROS2_HUMBLE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 
-# Download PX4 and its source dependencies for the simulator.
+# Copy the PX4 source that sim_build.sh prepared on the host.
 WORKDIR /DroneSimEnv
-RUN git clone --recursive --branch v1.16.1 \
-        https://github.com/PX4/PX4-Autopilot.git /DroneSimEnv/PX4-Autopilot
+COPY tools/_git_clones/PX4-Autopilot /DroneSimEnv/PX4-Autopilot
 
 WORKDIR /DroneSimEnv/PX4-Autopilot
 
