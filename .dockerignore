@@ -12,6 +12,12 @@ tools/_git_clones/**/.git/**
 **/install
 **/log
 
+# Downloaded Gazebo assets are mounted from the host when sim_run.sh starts.
+simulation/simulation_ws/src/simulation_resources/worlds/*
+simulation/simulation_ws/src/simulation_resources/drone_models/*
+!simulation/simulation_ws/src/simulation_resources/worlds/.gitkeep
+!simulation/simulation_ws/src/simulation_resources/drone_models/.gitkeep
+
 # Editor and operating-system files are not needed inside images.
 .DS_Store
 *.swp

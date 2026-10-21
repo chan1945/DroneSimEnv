@@ -8,3 +8,11 @@ tools/_git_clones/
 
 # prompt for agent
 tools/prompt.md
+
+# Ignore drone models that are downloaded from the internet
+simulation/simulation_ws/src/simulation_resources/drone_models/*
+!simulation/simulation_ws/src/simulation_resources/drone_models/.gitkeep
+
+# Ignore world files that are downloaded from the internet
+simulation/simulation_ws/src/simulation_resources/worlds/*
+!simulation/simulation_ws/src/simulation_resources/worlds/.gitkeep

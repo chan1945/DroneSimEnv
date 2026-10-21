@@ -19,6 +19,105 @@ GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
 # These flags stop cleanup from running too early or running twice.
 CLEANUP_DONE=false
 CLEANUP_ENABLED=false
+# WORLD_NAME identifies the selected SDF world.
+WORLD_NAME=""
+# MODEL_NAME identifies the selected Gazebo drone model directory.
+MODEL_NAME=""
+# AIRFRAME_ID overrides PX4's model-name airframe lookup when supplied.
+AIRFRAME_ID=""
+# WORLD_FILE is the chosen host-side world SDF file.
+WORLD_FILE=""
+# MODEL_DIR is the chosen host-side model directory.
+MODEL_DIR=""
+
+# Show the required resource names and the optional airframe override.
+usage() {
+    cat <<EOF
+Usage: $0 --world NAME --model NAME [--airframe ID]
+
+World: simulation/simulation_ws/src/simulation_resources/worlds/NAME/NAME.sdf
+       or simulation/simulation_ws/src/simulation_resources/worlds/NAME.sdf
+Model: simulation/simulation_ws/src/simulation_resources/drone_models/NAME/model.sdf
+
+PX4 chooses a matching built-in airframe by model name unless --airframe is set.
+EOF
+}
+
+# Parse CLI options before Docker creates or removes any containers.
+parse_options() {
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --world|--model|--airframe)
+                # The option name determines which selected value receives its argument.
+                local option="$1"
+                [[ "$#" -ge 2 && -n "$2" && "$2" != --* ]] || {
+                    echo "ERROR: ${option} requires a value." >&2
+                    usage >&2
+                    return 1
+                }
+                case "${option}" in
+                    --world) WORLD_NAME="$2" ;;
+                    --model) MODEL_NAME="$2" ;;
+                    --airframe) AIRFRAME_ID="$2" ;;
+                esac
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                return 2
+                ;;
+            *)
+                echo "ERROR: unknown option: $1" >&2
+                usage >&2
+                return 1
+                ;;
+        esac
+    done
+
+    if [[ -z "${WORLD_NAME}" || -z "${MODEL_NAME}" ]]; then
+        echo "ERROR: 월드와 드론 모델을 모두 지정해야 합니다 (--world NAME --model NAME)." >&2
+        usage >&2
+        return 1
+    fi
+}
+
+# Resolve only simple resource names within the two expected host directories.
+validate_resources() {
+    # The resource root contains the world and drone model directories.
+    local resource_root="${PROJECT_ROOT}/simulation/simulation_ws/src/simulation_resources"
+    # The world search root contains either flat SDF files or named folders.
+    local worlds_root="${resource_root}/worlds"
+    # The model search root contains named model folders.
+    local models_root="${resource_root}/drone_models"
+
+    [[ "${WORLD_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
+        echo "ERROR: invalid world name: ${WORLD_NAME}" >&2
+        return 1
+    }
+    [[ "${MODEL_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
+        echo "ERROR: invalid model name: ${MODEL_NAME}" >&2
+        return 1
+    }
+    [[ -z "${AIRFRAME_ID}" || "${AIRFRAME_ID}" =~ ^[0-9]+$ ]] || {
+        echo "ERROR: --airframe must be a numeric PX4 autostart ID." >&2
+        return 1
+    }
+
+    if [[ -f "${worlds_root}/${WORLD_NAME}/${WORLD_NAME}.sdf" ]]; then
+        WORLD_FILE="${worlds_root}/${WORLD_NAME}/${WORLD_NAME}.sdf"
+    elif [[ -f "${worlds_root}/${WORLD_NAME}.sdf" ]]; then
+        WORLD_FILE="${worlds_root}/${WORLD_NAME}.sdf"
+    else
+        echo "ERROR: world SDF was not found for '${WORLD_NAME}' in ${worlds_root}." >&2
+        return 1
+    fi
+
+    MODEL_DIR="${models_root}/${MODEL_NAME}"
+    [[ -f "${MODEL_DIR}/model.sdf" && -f "${MODEL_DIR}/model.config" ]] || {
+        echo "ERROR: model.sdf and model.config were not found for '${MODEL_NAME}' in ${models_root}." >&2
+        return 1
+    }
+}
 
 is_wsl2() {
     # WSL2 writes the word "microsoft" in this system file.
@@ -144,6 +243,20 @@ run_service() {
         run_args+=(--shm-size 2g)
     fi
 
+    if [[ "${service}" == "simulation" ]]; then
+        # PX4 selects the world and model through these environment variables.
+        run_args+=(
+            --env "PX4_GZ_WORLD=${WORLD_NAME}"
+            --env "PX4_SIM_MODEL=gz_${MODEL_NAME}"
+            --env "GZ_IP=127.0.0.1"
+            # Gazebo uses these paths for model URIs and world assets.
+            --env "GZ_SIM_RESOURCE_PATH=/DroneSimEnv/simulation_ws/src/simulation_resources/worlds:/DroneSimEnv/simulation_ws/src/simulation_resources/worlds/${WORLD_NAME}:/DroneSimEnv/simulation_ws/src/simulation_resources/drone_models"
+        )
+        if [[ -n "${AIRFRAME_ID}" ]]; then
+            run_args+=(--env "PX4_SYS_AUTOSTART=${AIRFRAME_ID}")
+        fi
+    fi
+
     if is_wsl2; then
         # These settings let WSLg pass graphics and sound into the container.
         run_args+=(
@@ -167,6 +280,26 @@ run_service() {
     docker run "${run_args[@]}" "${image}" >/dev/null
 }
 
+# Place the selected files where PX4 v1.16 expects its Gazebo assets.
+stage_simulation_resources() {
+    echo "Loading world '${WORLD_NAME}' and model '${MODEL_NAME}' into PX4..."
+    docker cp "${WORLD_FILE}" \
+        "simulation:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/${WORLD_NAME}.sdf"
+    docker exec simulation cp -a \
+        "/DroneSimEnv/simulation_ws/src/simulation_resources/drone_models/${MODEL_NAME}/." \
+        "/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/models/${MODEL_NAME}/"
+}
+
+# Start PX4 in a persistent tmux window so its console and startup errors stay visible.
+start_px4() {
+    docker exec simulation tmux new-session -d -s simulation -n shell \
+        -c /DroneSimEnv/simulation_ws
+    docker exec simulation tmux new-window -t simulation -n px4 \
+        -c /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/rootfs
+    docker exec simulation tmux send-keys -t simulation:px4 \
+        /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/bin/px4 Enter
+}
+
 open_terminal() {
     local service="$1"
     local title="$2"
@@ -180,12 +313,12 @@ open_terminal() {
 }
 
 main() {
-    # This script has no commands or options. It always starts all containers.
-    if [[ "$#" -ne 0 ]]; then
-        echo "ERROR: sim_run.sh does not accept commands or options." >&2
-        echo "Usage: $0" >&2
-        exit 1
-    fi
+    # A help request exits before checking Docker or altering containers.
+    parse_options "$@" || {
+        [[ "$?" -eq 2 ]] && return 0
+        return 1
+    }
+    validate_resources
 
     require_docker
     require_images
@@ -204,13 +337,15 @@ main() {
     run_service "drone" "${DRONE_IMAGE}" \
         "${PROJECT_ROOT}/drone/drone_ws/src" \
         "/DroneSimEnv/drone_ws/src"
+    stage_simulation_resources
+    start_px4
 
     # Give Docker a moment before the new xterm windows enter the containers.
     sleep 3
     open_terminal "drone" "Drone (ROS 2)" \
         "/DroneSimEnv/drone_ws"
     open_terminal "simulation" "Simulation (PX4)" \
-        "/DroneSimEnv/simulation_ws"
+        "/DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/rootfs"
     open_terminal "ground" "Ground (QGC)" \
         "/DroneSimEnv/ground_ws"
 

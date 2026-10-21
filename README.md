@@ -32,8 +32,43 @@ uses its graphics settings automatically.
 ```bash
 cd DroneSimEnv
 ./tools/sim_build.sh
-./tools/sim_run.sh
+./tools/sim_run.sh --world walls --model x500
 ```
+
+`--world` and `--model` are required. If either is missing, the run script exits
+with an error before touching Docker containers. Put downloaded Gazebo Harmonic
+resources in these paths before running it:
+
+```text
+simulation/simulation_ws/src/simulation_resources/
+├── worlds/
+│   └── walls/
+│       └── walls.sdf
+└── drone_models/
+    └── x500/
+        ├── model.config
+        ├── model.sdf
+        └── meshes/ ...
+```
+
+The world may also be a single `worlds/<name>.sdf` file. Pass the world name
+without `.sdf` and the model directory name. Resource names may contain letters,
+digits, underscores, and hyphens. The downloaded model must contain a PX4-compatible
+Gazebo SDF, including the sensors and motor plugins expected by its PX4 airframe.
+The SDF `<world name>` and `<model name>` should match the names passed to the
+script because PX4 uses those names for Gazebo service and model lookup.
+
+PX4 uses a built-in airframe matching `gz_<model>` when one exists. For a model
+that uses a different airframe, provide its PX4 autostart ID, for example:
+
+```bash
+./tools/sim_run.sh --world walls --model custom_quad --airframe 4001
+```
+
+The script starts PX4 SITL and Gazebo in the simulation container's `px4` tmux
+window. Use `Ctrl+B`, then `0` to switch to the simulation shell, and `Ctrl+B`,
+then `1` to return to PX4. Model and world files are loaded from the host at run
+time, so adding or changing them does not require rebuilding the images.
 
 The build script first prepares external Git sources in `tools/_git_clones`.
 It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and
