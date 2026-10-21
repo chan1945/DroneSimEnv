@@ -1,28 +1,39 @@
-# Build this image from the shared CUDA 13.3.0 and ROS 2 Humble image.
+# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built by sim_build.sh.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
+
+########################################################################
+# simulation image
+########################################################################
+# This image adds PX4 SITL and the simulation workspace to ROS 2 Humble.
 FROM ${ROS2_HUMBLE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 
+########################################################################
+# PX4 SITL
+########################################################################
 # Copy the PX4 source that sim_build.sh prepared on the host.
 WORKDIR /DroneSimEnv
 COPY tools/_git_clones/PX4-Autopilot /DroneSimEnv/PX4-Autopilot
 
-WORKDIR /DroneSimEnv/PX4-Autopilot
-
 # Install the packages PX4 needs, then make its helper tools available.
+WORKDIR /DroneSimEnv/PX4-Autopilot
 RUN bash ./Tools/setup/ubuntu.sh
+# PATH lets the shell find PX4 helper tools installed for the root user.
 ENV PATH="/root/.local/bin:${PATH}"
 
-# This helps GUI programs share an X11 display with the host.
+# QT_X11_NO_MITSHM avoids shared-memory problems when using the host X11 display.
 ENV QT_X11_NO_MITSHM=1
 
 # Build PX4 SITL once while the Docker image is being made.
 RUN make px4_sitl
 
+########################################################################
+# simulation workspace
+########################################################################
 # Copy and build only this service's ROS 2 workspace.
-COPY simulation/simulation_ws/src /DroneSimEnv/simulation_ws/src
 WORKDIR /DroneSimEnv/simulation_ws
+COPY simulation/simulation_ws/src /DroneSimEnv/simulation_ws/src
 RUN source /opt/ros/humble/setup.bash \
     && apt-get update \
     && rosdep install --from-paths src --ignore-src -r -y \

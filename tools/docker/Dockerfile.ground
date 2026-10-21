@@ -1,9 +1,17 @@
-# Build this image from the shared CUDA 13.3.0 and ROS 2 Humble image.
+# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built by sim_build.sh.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
+
+########################################################################
+# ground image
+########################################################################
+# This image adds QGroundControl and the ground workspace to ROS 2 Humble.
 FROM ${ROS2_HUMBLE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 
+########################################################################
+# ground tools
+########################################################################
 # Install tools and libraries used only by the ground station.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
@@ -37,18 +45,22 @@ RUN useradd -m -s /bin/bash qgcuser \
     && usermod -aG dialout qgcuser
 
 # Download and unpack QGroundControl so the container can run it directly.
-RUN wget -q https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
+RUN wget -q \
+        https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
     && chmod +x QGroundControl-x86_64.AppImage \
     && ./QGroundControl-x86_64.AppImage --appimage-extract \
     && rm QGroundControl-x86_64.AppImage \
     && ln -s /squashfs-root/AppRun /usr/local/bin/qgc
 
-# This helps GUI programs share an X11 display with the host.
+# QT_X11_NO_MITSHM avoids shared-memory problems when using the host X11 display.
 ENV QT_X11_NO_MITSHM=1
 
+########################################################################
+# ground workspace
+########################################################################
 # Copy and build only this service's ROS 2 workspace.
-COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
 WORKDIR /DroneSimEnv/ground_ws
+COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
 RUN source /opt/ros/humble/setup.bash \
     && apt-get update \
     && rosdep install --from-paths src --ignore-src -r -y \
@@ -56,10 +68,16 @@ RUN source /opt/ros/humble/setup.bash \
     && rm -rf /var/lib/apt/lists/* \
     && echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
 
+########################################################################
+# QGroundControl lifecycle
+########################################################################
 WORKDIR /DroneSimEnv/ground_ws
 # Start QGroundControl when a GUI display is available.
 # Keep the container alive so sim_run.sh can open a tmux shell inside it.
 # Stop child processes safely when Docker asks the container to exit.
+# QGC_PID stores the QGroundControl process ID for cleanup.
+# KEEPALIVE_PID stores the keep-alive process ID for cleanup.
+# cleanup stops both child processes before the container exits.
 CMD ["/bin/bash", "-lc", "set -Eeuo pipefail; \\
 QGC_PID=''; \\
 KEEPALIVE_PID=''; \\

@@ -1,11 +1,12 @@
-# These values are also used as Docker image tags in tools/sim_build.sh.
-# from NGC catalog
+# These image names are also used as tags in tools/sim_build.sh.
+# CUDA_IMAGE is the NVIDIA CUDA image used by the shared base stage.
 ARG CUDA_IMAGE=nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
+# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built before this image.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
 
 ########################################################################
-# base image and basic tools
+# shared base tools
 ########################################################################
 # This stage contains tools that every DroneSimEnv container needs.
 FROM ${CUDA_IMAGE} AS base_amd64
@@ -33,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 
 ########################################################################
-# Install ROS 2 Humble
+# ROS 2 Humble
 ########################################################################
 # This stage adds ROS 2 Humble to the shared base image.
 FROM base_amd64 AS ros2_humble
@@ -41,7 +42,9 @@ FROM base_amd64 AS ros2_humble
 # Use UTF-8 text so ROS 2 tools and terminals can handle normal characters.
 RUN locale-gen en_US.UTF-8 \
     && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+# LANG chooses UTF-8 as the default language encoding.
 ENV LANG=en_US.UTF-8
+# LC_ALL makes every locale category use UTF-8.
 ENV LC_ALL=en_US.UTF-8
 
 # Add the official ROS 2 package source, then install ROS 2 and build tools.
@@ -63,9 +66,9 @@ RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 
 
 ########################################################################
-# Install DDS
-#########################################################################
-# Use the tagged shared ROS image. Build it first with sim_build.sh.
+# DDS agent
+########################################################################
+# This stage uses the shared ROS 2 image that sim_build.sh builds first.
 FROM ${ROS2_HUMBLE_IMAGE} AS ros2-dds
 
 SHELL ["/bin/bash", "-c"]
@@ -73,7 +76,9 @@ SHELL ["/bin/bash", "-c"]
 # Build the DDS agent that connects PX4 messages to ROS 2.
 WORKDIR /DroneSimEnv
 COPY tools/_git_clones/Micro-XRCE-DDS-Agent /DroneSimEnv/Micro-XRCE-DDS-Agent
-RUN cmake -S /DroneSimEnv/Micro-XRCE-DDS-Agent -B /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
+RUN cmake \
+        -S /DroneSimEnv/Micro-XRCE-DDS-Agent \
+        -B /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
     && cmake --build /DroneSimEnv/Micro-XRCE-DDS-Agent/build --parallel "$(nproc)" \
     && cmake --install /DroneSimEnv/Micro-XRCE-DDS-Agent/build \
     && ldconfig \
@@ -81,10 +86,10 @@ RUN cmake -S /DroneSimEnv/Micro-XRCE-DDS-Agent -B /DroneSimEnv/Micro-XRCE-DDS-Ag
 
 
 ########################################################################
-# Install gz_bridge
-#########################################################################
+# Gazebo support
+########################################################################
+# This stage adds Gazebo Harmonic support for the drone service.
 FROM ros2-dds AS ros2-dds-gzbridge
-# Install Gazebo Harmonic support used by the drone service.
 RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
         -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \
@@ -95,14 +100,16 @@ RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
 
 
 ########################################################################
-# Install gz_bridge
-#########################################################################
+# drone workspace
+########################################################################
+# This final stage builds the drone service's ROS 2 workspace.
 FROM ros2-dds-gzbridge AS drone
+
 # Copy and build only this service's ROS 2 workspace.
+WORKDIR /DroneSimEnv/drone_ws
 COPY drone/drone_ws/src /DroneSimEnv/drone_ws/src
 # Add the cached PX4 ROS message package before building the workspace.
 COPY tools/_git_clones/px4_msgs /DroneSimEnv/drone_ws/src/px4_msgs
-WORKDIR /DroneSimEnv/drone_ws
 RUN source /opt/ros/humble/setup.bash \
     && apt-get update \
     && rosdep install --from-paths src --ignore-src -r -y \
