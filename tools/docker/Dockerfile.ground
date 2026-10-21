@@ -39,16 +39,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
+# Install tmuxinator to start the ground tmux session from its project config.
+RUN gem install tmuxinator --no-document
+
 # Run QGroundControl as a regular user instead of root.
 WORKDIR /
 RUN useradd -m -s /bin/bash qgcuser \
     && usermod -aG dialout qgcuser
 
-# Download and unpack QGroundControl so the container can run it directly.
+# Pin QGroundControl 5.0.8, which supports the Ubuntu 22.04 base image.
 RUN wget -q \
-        https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage \
+        https://github.com/mavlink/qgroundcontrol/releases/download/v5.0.8/QGroundControl-x86_64.AppImage \
+        -O QGroundControl-x86_64.AppImage \
+    && echo "06969c67ef58ea063def0a8271447a1cc385438c4a7df36813315b4475146737  QGroundControl-x86_64.AppImage" \
+        | sha256sum --check \
     && chmod +x QGroundControl-x86_64.AppImage \
-    && ./QGroundControl-x86_64.AppImage --appimage-extract \
+    && ./QGroundControl-x86_64.AppImage --appimage-extract >/dev/null \
+    && chmod -R a+rX /squashfs-root \
     && rm QGroundControl-x86_64.AppImage \
     && ln -s /squashfs-root/AppRun /usr/local/bin/qgc
 
@@ -72,6 +79,6 @@ RUN source /opt/ros/humble/setup.bash \
 # QGroundControl lifecycle
 ########################################################################
 WORKDIR /DroneSimEnv/ground_ws
-# Run QGroundControl when a GUI display is available and keep the container alive.
-COPY --chmod=755 tools/docker/ground-entrypoint.sh /usr/local/bin/ground-entrypoint.sh
-CMD ["/usr/local/bin/ground-entrypoint.sh"]
+# Start the ground session and QGroundControl from the tmuxinator config.
+COPY ground/ground.yml.erb /DroneSimEnv/ground_ws/ground.yml.erb
+ENTRYPOINT ["tmuxinator", "start", "-p", "/DroneSimEnv/ground_ws/ground.yml.erb"]
