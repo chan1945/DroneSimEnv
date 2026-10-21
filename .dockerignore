@@ -1,16 +1,27 @@
-# Keep Git history and local agent files out of Docker build uploads.
+# Keep this project's Git history and local agent files out of Docker builds.
 .git
 .agents
 .codex
 
-# Keep cache Git metadata out of Docker while still sending cached source files.
-tools/_git_clones/**/.git
-tools/_git_clones/**/.git/**
+# PX4's Makefile and submodule checks need its real Git metadata during SITL builds.
+# The other cached repositories only provide source files to their images.
+tools/_git_clones/px4_msgs/.git
+tools/_git_clones/Micro-XRCE-DDS-Agent/.git
+!tools/_git_clones/PX4-Autopilot/.git
+!tools/_git_clones/PX4-Autopilot/**/.git
 
-# ROS 2 build output is made inside Docker and should not break the cache.
-**/build
-**/install
-**/log
+# Ignore only generated workspace output; PX4 dependencies contain source log directories.
+drone/drone_ws/build
+drone/drone_ws/install
+drone/drone_ws/log
+ground/ground_ws/build
+ground/ground_ws/install
+ground/ground_ws/log
+simulation/simulation_ws/build
+simulation/simulation_ws/install
+simulation/simulation_ws/log
+tools/_git_clones/PX4-Autopilot/build
+tools/_git_clones/Micro-XRCE-DDS-Agent/build
 
 # Downloaded Gazebo assets are mounted from the host when sim_run.sh starts.
 simulation/simulation_ws/src/simulation_resources/worlds/*
