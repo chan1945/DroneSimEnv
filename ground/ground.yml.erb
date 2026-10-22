@@ -1,0 +1,10 @@
+# The session name matches the ground terminal opened by sim_run.sh.
+name: ground
+# Open ground windows in the ROS 2 workspace.
+root: /DroneSimEnv/ground_ws
+
+windows:
+  # Show QGroundControl output in a dedicated tmux window.
+  - qgc: if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then gosu qgcuser env HOME=/home/qgcuser qgc; else echo 'Skipping QGroundControl startup because no GUI display variables are set.'; fi
+  # Keep a shell available when QGroundControl exits.
+  - shell:

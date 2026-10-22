@@ -23,14 +23,15 @@ CLEANUP_ENABLED=false
 WORLD_NAME=""
 # MODEL_NAME identifies the selected Gazebo drone model directory.
 MODEL_NAME=""
-# AIRFRAME_ID overrides PX4's model-name airframe lookup when supplied.
-AIRFRAME_ID=""
+# AIRFRAME_ID selects PX4 flight parameters independently of the custom model name.
+# 4001 is the default quadrotor configuration; other vehicles need a matching ID.
+AIRFRAME_ID="4001"
 # WORLD_FILE is the chosen host-side world SDF file.
 WORLD_FILE=""
 # MODEL_DIR is the chosen host-side model directory.
 MODEL_DIR=""
 
-# Show the required resource names and the optional airframe override.
+# Show the required custom resource names and the independent PX4 airframe setting.
 usage() {
     cat <<EOF
 Usage: $0 --world NAME --model NAME [--airframe ID]
@@ -39,7 +40,8 @@ World: simulation/simulation_ws/src/simulation_resources/worlds/NAME/NAME.sdf
        or simulation/simulation_ws/src/simulation_resources/worlds/NAME.sdf
 Model: simulation/simulation_ws/src/simulation_resources/drone_models/NAME/model.sdf
 
-PX4 chooses a matching built-in airframe by model name unless --airframe is set.
+Resources are loaded from these host paths, including when their names match built-in assets.
+--airframe selects PX4 flight parameters independently of the model (default: 4001, quadrotor).
 EOF
 }
 
@@ -98,8 +100,8 @@ validate_resources() {
         echo "ERROR: invalid model name: ${MODEL_NAME}" >&2
         return 1
     }
-    [[ -z "${AIRFRAME_ID}" || "${AIRFRAME_ID}" =~ ^[0-9]+$ ]] || {
-        echo "ERROR: --airframe must be a numeric PX4 autostart ID." >&2
+    [[ "${AIRFRAME_ID}" =~ ^[1-9][0-9]*$ ]] || {
+        echo "ERROR: --airframe must be a positive PX4 autostart ID." >&2
         return 1
     }
 
@@ -244,17 +246,23 @@ run_service() {
     fi
 
     if [[ "${service}" == "simulation" ]]; then
-        # PX4 selects the world and model through these environment variables.
+        # Mount the custom model root over PX4's model root to hide built-in models.
+        # Bind the selected world file directly instead of merging it with image content.
+        run_args+=(
+            --volume "${PROJECT_ROOT}/simulation/simulation_ws/src/simulation_resources/drone_models:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/models:ro"
+            --volume "${WORLD_FILE}:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/${WORLD_NAME}.sdf:ro"
+        )
+        # PX4 strips the gz_ prefix and opens models/<custom name>/model.sdf.
+        # An explicit autostart ID prevents a lookup of built-in airframes by model name.
         run_args+=(
             --env "PX4_GZ_WORLD=${WORLD_NAME}"
             --env "PX4_SIM_MODEL=gz_${MODEL_NAME}"
+            --env "PX4_SYS_AUTOSTART=${AIRFRAME_ID}"
+            --env "PX4_SIMULATOR=gz"
             --env "GZ_IP=127.0.0.1"
             # Gazebo uses these paths for model URIs and world assets.
             --env "GZ_SIM_RESOURCE_PATH=/DroneSimEnv/simulation_ws/src/simulation_resources/worlds:/DroneSimEnv/simulation_ws/src/simulation_resources/worlds/${WORLD_NAME}:/DroneSimEnv/simulation_ws/src/simulation_resources/drone_models"
         )
-        if [[ -n "${AIRFRAME_ID}" ]]; then
-            run_args+=(--env "PX4_SYS_AUTOSTART=${AIRFRAME_ID}")
-        fi
     fi
 
     if is_wsl2; then
@@ -278,16 +286,6 @@ run_service() {
 
     echo "Creating and starting ${service}..."
     docker run "${run_args[@]}" "${image}" >/dev/null
-}
-
-# Place the selected files where PX4 v1.16 expects its Gazebo assets.
-stage_simulation_resources() {
-    echo "Loading world '${WORLD_NAME}' and model '${MODEL_NAME}' into PX4..."
-    docker cp "${WORLD_FILE}" \
-        "simulation:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/${WORLD_NAME}.sdf"
-    docker exec simulation cp -a \
-        "/DroneSimEnv/simulation_ws/src/simulation_resources/drone_models/${MODEL_NAME}/." \
-        "/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/models/${MODEL_NAME}/"
 }
 
 # Start PX4 in a persistent tmux window so its console and startup errors stay visible.
@@ -337,7 +335,6 @@ main() {
     run_service "drone" "${DRONE_IMAGE}" \
         "${PROJECT_ROOT}/drone/drone_ws/src" \
         "/DroneSimEnv/drone_ws/src"
-    stage_simulation_resources
     start_px4
 
     # Give Docker a moment before the new xterm windows enter the containers.

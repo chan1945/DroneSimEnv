@@ -55,15 +55,28 @@ The world may also be a single `worlds/<name>.sdf` file. Pass the world name
 without `.sdf` and the model directory name. Resource names may contain letters,
 digits, underscores, and hyphens. The downloaded model must contain a PX4-compatible
 Gazebo SDF, including the sensors and motor plugins expected by its PX4 airframe.
-The SDF `<world name>` and `<model name>` should match the names passed to the
-script because PX4 uses those names for Gazebo service and model lookup.
+The SDF `<world name>` must match `--world` because PX4 uses it for Gazebo service
+lookup. PX4 spawns the selected model as `<model directory name>_0`.
 
-PX4 uses a built-in airframe matching `gz_<model>` when one exists. For a model
-that uses a different airframe, provide its PX4 autostart ID, for example:
+The script mounts the host `drone_models` directory over PX4's model directory
+and mounts the selected world SDF directly at PX4's world file path, both read-only.
+The selected files are used even if their names match built-in PX4 resources.
+Place any models referenced by `model://` URIs in `drone_models` as well; built-in
+model files are hidden by the mount.
+
+PX4 flight parameters are selected independently of the custom model name.
+`--airframe` defaults to `4001`, a quadrotor configuration. Use an appropriate PX4
+autostart ID for the vehicle's rotor layout and actuator mapping, for example:
 
 ```bash
 ./tools/sim_run.sh --world walls --model custom_quad --airframe 4001
 ```
+
+`PX4_SIM_MODEL=gz_custom_quad` tells PX4 to open the mounted
+`models/custom_quad/model.sdf`; it does not require a built-in model named
+`custom_quad`. The explicit `PX4_SYS_AUTOSTART` setting avoids matching the custom
+model name against built-in airframes. Choosing an airframe does not replace the
+custom model SDF.
 
 The script starts PX4 SITL and Gazebo in the simulation container's `px4` tmux
 window. Use `Ctrl+B`, then `0` to switch to the simulation shell, and `Ctrl+B`,
@@ -105,11 +118,11 @@ folders are `/DroneSimEnv/simulation_ws` and `/DroneSimEnv/ground_ws`.
 
 ### QGroundControl logs
 
-The `ground` container saves QGroundControl output in `/tmp/qgc.log`. Use this
-command when QGroundControl does not open or closes unexpectedly:
+QGroundControl output appears in the `qgc` tmux window. Use this command to
+read its recent output when QGroundControl does not open or closes unexpectedly:
 
 ```bash
-docker exec -it ground cat /tmp/qgc.log
+docker exec ground tmux capture-pane -p -S -200 -t ground:qgc
 ```
 
 ## Included Software
