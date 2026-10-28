@@ -1,10 +1,16 @@
-# The session name matches the ground terminal opened by sim_run.sh.
+# ground 컨테이너의 QGroundControl·대화형 셸을 tmux 창으로 구성하는 tmuxinator 프로젝트 파일입니다.
+# Docker ENTRYPOINT가 이 파일을 -p로 읽어 세션을 만들고, sim_run.sh의 xterm이 같은 세션에 접속합니다.
+# name: sim_run.sh의 서비스 이름과 같은 ground를 세션 이름으로 사용해 기존 세션에 재접속할 수 있게 합니다.
 name: ground
-# Open ground windows in the ROS 2 workspace.
+# root: 새 tmux 창의 시작 디렉터리를 컨테이너의 ground ROS 2 workspace로 지정합니다.
 root: /DroneSimEnv/ground_ws
 
+# windows: 목록의 순서대로 QGC 출력 창과 별도 대화형 셸 창을 생성합니다.
 windows:
-  # Show QGroundControl output in a dedicated tmux window.
+  # qgc: GUI 환경이 있으면 gosu로 qgcuser에 전환해 QGC를 실행하고 해당 창에 출력을 남깁니다.
+  # DISPLAY·WAYLAND_DISPLAY: 셸에서 미정의 값은 빈 문자열로 읽고 둘 중 하나라도 있으면 GUI 실행을 시도합니다.
+  # HOME: QGC 프로세스에 /home/qgcuser를 전달해 설정·캐시·로그가 일반 사용자 홈을 기준으로 생성되도록 합니다.
+  # GUI 환경이 없으면 건너뛰었다는 메시지를 표시하고 창의 셸은 그대로 유지합니다.
   - qgc: if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then gosu qgcuser env HOME=/home/qgcuser qgc; else echo 'Skipping QGroundControl startup because no GUI display variables are set.'; fi
-  # Keep a shell available when QGroundControl exits.
+  # shell: 실행할 명령을 비워 tmuxinator가 기본 셸을 열게 하며 QGC 종료 후에도 작업용 창을 제공합니다.
   - shell:

@@ -1,18 +1,21 @@
-# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built by sim_build.sh.
+# QGroundControl 5.0.8과 ground ROS 2 workspace를 설치하고 tmuxinator로 QGC·shell 창을 여는 Dockerfile입니다.
+# QGC는 일반 사용자로 실행하며, 시작 명령과 GUI 환경 유무 검사는 ground.yml.erb에서 관리합니다.
+# ROS2_HUMBLE_IMAGE: sim_build.sh가 먼저 만든 공통 ROS 2 이미지의 태그를 받아 FROM에서 사용합니다.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
 ########################################################################
-# ground image
+# ground 이미지 기반
 ########################################################################
-# This image adds QGroundControl and the ground workspace to ROS 2 Humble.
+# 공통 ROS 2 이미지를 기반으로 QGroundControl 실행 환경과 ground workspace를 추가합니다.
 FROM ${ROS2_HUMBLE_IMAGE}
 
+# ROS setup.bash를 source할 수 있도록 이후 RUN 명령의 셸을 Bash로 지정합니다.
 SHELL ["/bin/bash", "-c"]
 
 ########################################################################
-# ground tools
+# QGroundControl 실행 도구
 ########################################################################
-# Install tools and libraries used only by the ground station.
+# QGC의 사용자 전환·화면·영상·오디오 라이브러리와 tmuxinator용 Ruby를 설치하고 apt 목록을 정리합니다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     gstreamer1.0-gl \
@@ -39,15 +42,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install tmuxinator to start the ground tmux session from its project config.
+# RubyGems로 tmuxinator를 설치해 ground.yml.erb의 세션·창 설정을 tmux 명령으로 실행할 수 있게 합니다.
 RUN gem install tmuxinator --no-document
 
-# Run QGroundControl as a regular user instead of root.
+# qgcuser의 홈과 Bash 로그인 셸을 만들고 dialout 그룹에 추가해 QGC를 root 권한 없이 실행하도록 준비합니다.
 WORKDIR /
 RUN useradd -m -s /bin/bash qgcuser \
     && usermod -aG dialout qgcuser
 
-# Pin QGroundControl 5.0.8, which supports the Ubuntu 22.04 base image.
+# Ubuntu 22.04에서 사용할 QGC 5.0.8 AppImage를 내려받고 공식 릴리스의 SHA-256과 비교합니다.
+# AppImage를 추출하고 일반 사용자의 읽기·디렉터리 접근·기존 실행 파일 실행을 허용한 뒤 qgc 명령을 연결합니다.
 RUN wget -q \
         https://github.com/mavlink/qgroundcontrol/releases/download/v5.0.8/QGroundControl-x86_64.AppImage \
         -O QGroundControl-x86_64.AppImage \
@@ -59,13 +63,14 @@ RUN wget -q \
     && rm QGroundControl-x86_64.AppImage \
     && ln -s /squashfs-root/AppRun /usr/local/bin/qgc
 
-# QT_X11_NO_MITSHM avoids shared-memory problems when using the host X11 display.
+# QT_X11_NO_MITSHM: Qt의 X11 공유 메모리 사용을 꺼 호스트 화면을 공유할 때의 표시 충돌을 줄입니다.
 ENV QT_X11_NO_MITSHM=1
 
 ########################################################################
-# ground workspace
+# ground ROS 2 workspace
 ########################################################################
-# Copy and build only this service's ROS 2 workspace.
+# ground src를 전용 workspace로 복사하고 ROS 환경에서 rosdep·colcon으로 의존성 설치와 빌드를 수행합니다.
+# --symlink-install을 사용하고 .bashrc에 환경 로드를 추가해 새 root Bash 셸에서 설치 패키지를 찾게 합니다.
 WORKDIR /DroneSimEnv/ground_ws
 COPY ground/ground_ws/src /DroneSimEnv/ground_ws/src
 RUN source /opt/ros/humble/setup.bash \
@@ -76,9 +81,9 @@ RUN source /opt/ros/humble/setup.bash \
     && echo "source /DroneSimEnv/ground_ws/install/setup.bash" >> /root/.bashrc
 
 ########################################################################
-# QGroundControl lifecycle
+# QGroundControl 시작 설정
 ########################################################################
 WORKDIR /DroneSimEnv/ground_ws
-# Start the ground session and QGroundControl from the tmuxinator config.
+# tmuxinator 프로젝트 파일을 workspace에 복사하고 컨테이너 시작 시 해당 설정으로 ground 세션에 접속합니다.
 COPY ground/ground.yml.erb /DroneSimEnv/ground_ws/ground.yml.erb
 ENTRYPOINT ["tmuxinator", "start", "-p", "/DroneSimEnv/ground_ws/ground.yml.erb"]

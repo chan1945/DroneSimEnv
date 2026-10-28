@@ -1,21 +1,23 @@
-# These image names are also used as tags in tools/sim_build.sh.
-# CUDA_IMAGE is the NVIDIA CUDA image used by the shared base stage.
+# 공통 CUDA·ROS 2 이미지와 DDS Agent·Gazebo 브리지를 포함한 drone 이미지를 단계별로 빌드하는 Dockerfile입니다.
+# sim_build.sh가 base_amd64, ros2_humble, drone 타깃을 각각 빌드하고 공통 ROS 이미지를 서비스에 전달합니다.
+# CUDA_IMAGE: base_amd64의 FROM에 사용할 NVIDIA CUDA·cuDNN·Ubuntu 기본 이미지를 빌드 인자로 선택합니다.
 ARG CUDA_IMAGE=nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
-# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built before this image.
+# ROS2_HUMBLE_IMAGE: DDS Agent 스테이지의 FROM에 사용할 공통 ROS 2 이미지이며 sim_build.sh가 태그를 전달합니다.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
 
 ########################################################################
-# shared base tools
+# 공통 기본 도구
 ########################################################################
-# This stage contains tools that every DroneSimEnv container needs.
+# base_amd64 스테이지는 CUDA_IMAGE에 공통 개발·네트워크·터미널 도구를 설치해 다음 ROS 스테이지에 제공합니다.
 FROM ${CUDA_IMAGE} AS base_amd64
 
-# Do not ask questions while packages are being installed.
+# DEBIAN_FRONTEND: apt가 대화형 설정 화면을 열지 않도록 noninteractive를 지정해 자동 빌드가 대기하지 않게 합니다.
 ENV DEBIAN_FRONTEND=noninteractive
+# 이후 RUN 명령은 Bash로 실행해 source와 Bash 구문을 사용할 수 있게 합니다.
 SHELL ["/bin/bash", "-c"]
 
-# Install shared command-line tools only once.
+# 공통 명령행 도구를 한 레이어에 설치하고 apt 목록을 제거해 서비스 이미지들이 설치 결과를 공유하게 합니다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -36,18 +38,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ########################################################################
 # ROS 2 Humble
 ########################################################################
-# This stage adds ROS 2 Humble to the shared base image.
+# ros2_humble 스테이지는 공통 도구 이미지에 ROS 2 Humble을 설치해 세 서비스의 기반 이미지를 만듭니다.
 FROM base_amd64 AS ros2_humble
 
-# Use UTF-8 text so ROS 2 tools and terminals can handle normal characters.
+# en_US.UTF-8 로케일을 생성하고 시스템 기본 로케일을 설정해 ROS 도구와 터미널의 문자 처리를 맞춥니다.
 RUN locale-gen en_US.UTF-8 \
     && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-# LANG chooses UTF-8 as the default language encoding.
+# LANG: 개별 로케일 항목이 지정되지 않았을 때 en_US.UTF-8을 기본 문자·언어 설정으로 사용합니다.
 ENV LANG=en_US.UTF-8
-# LC_ALL makes every locale category use UTF-8.
+# LC_ALL: 다른 로케일 항목보다 우선하여 모든 범주에 en_US.UTF-8을 적용합니다.
 ENV LC_ALL=en_US.UTF-8
 
-# Add the official ROS 2 package source, then install ROS 2 and build tools.
+# 공식 ROS 서명 키·apt 저장소를 등록하고 ROS 2와 빌드 도구를 설치한 뒤 rosdep 데이터베이스를 초기화합니다.
+# UBUNTU_CODENAME: /etc/os-release를 source해 얻은 배포판 코드명을 apt 저장소 경로에 넣습니다.
+# 새 root Bash 셸에서 ROS 환경을 사용할 수 있도록 setup.bash 로드를 .bashrc에 추가합니다.
 RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
         -o /usr/share/keyrings/ros-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
@@ -66,14 +70,16 @@ RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 
 
 ########################################################################
-# DDS agent
+# DDS Agent
 ########################################################################
-# This stage uses the shared ROS 2 image that sim_build.sh builds first.
+# ros2-dds 스테이지는 sim_build.sh가 먼저 만든 공통 ROS 2 이미지에서 DDS Agent를 빌드합니다.
 FROM ${ROS2_HUMBLE_IMAGE} AS ros2-dds
 
+# 외부 공통 이미지에서 시작하므로 이 스테이지에도 RUN 명령의 Bash 실행 방식을 지정합니다.
 SHELL ["/bin/bash", "-c"]
 
-# Build the DDS agent that connects PX4 messages to ROS 2.
+# 캐시된 DDS Agent 소스를 CMake로 병렬 빌드·설치하고 ldconfig로 공유 라이브러리 검색 정보를 갱신합니다.
+# 설치 후 복사한 소스·빌드 작업 디렉터리를 지워 다음 스테이지의 파일시스템에는 설치 결과만 남깁니다.
 WORKDIR /DroneSimEnv
 COPY tools/_git_clones/Micro-XRCE-DDS-Agent /DroneSimEnv/Micro-XRCE-DDS-Agent
 RUN cmake \
@@ -86,9 +92,9 @@ RUN cmake \
 
 
 ########################################################################
-# Gazebo support
+# Gazebo 브리지
 ########################################################################
-# This stage adds Gazebo Harmonic support for the drone service.
+# ros2-dds-gzbridge 스테이지는 OSRF 저장소에서 Humble·Harmonic용 ROS-Gazebo 브리지 패키지를 설치합니다.
 FROM ros2-dds AS ros2-dds-gzbridge
 RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
         -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
@@ -100,16 +106,18 @@ RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
 
 
 ########################################################################
-# drone workspace
+# drone ROS 2 workspace
 ########################################################################
-# This final stage builds the drone service's ROS 2 workspace.
+# 최종 drone 스테이지는 DDS Agent·Gazebo 브리지 위에서 사용자 ROS 2 workspace와 PX4 메시지를 빌드합니다.
 FROM ros2-dds-gzbridge AS drone
 
-# Copy and build only this service's ROS 2 workspace.
+# 호스트의 drone src만 복사하고 이 서비스의 workspace 루트를 작업 경로로 사용합니다.
 WORKDIR /DroneSimEnv/drone_ws
 COPY drone/drone_ws/src /DroneSimEnv/drone_ws/src
-# Add the cached PX4 ROS message package before building the workspace.
+# 외부 캐시의 px4_msgs를 workspace의 src에 추가해 사용자 패키지와 함께 빌드합니다.
 COPY tools/_git_clones/px4_msgs /DroneSimEnv/drone_ws/src/px4_msgs
+# ROS 환경을 로드한 뒤 rosdep으로 의존성을 설치하고 colcon의 심볼릭 링크 설치 방식으로 빌드합니다.
+# workspace 환경 로드를 root의 .bashrc에 추가해 새 대화형 Bash 셸에서 설치 패키지를 찾을 수 있게 합니다.
 RUN source /opt/ros/humble/setup.bash \
     && apt-get update \
     && rosdep install --from-paths src --ignore-src -r -y \
@@ -117,5 +125,6 @@ RUN source /opt/ros/humble/setup.bash \
     && rm -rf /var/lib/apt/lists/* \
     && echo "source /DroneSimEnv/drone_ws/install/setup.bash" >> /root/.bashrc
 
+# 컨테이너 기본 실행은 저장소 작업 경로의 Bash이며, sim_run.sh의 대화형 옵션으로 입력 연결을 유지합니다.
 WORKDIR /DroneSimEnv
 CMD ["/bin/bash"]

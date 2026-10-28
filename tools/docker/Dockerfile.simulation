@@ -1,37 +1,41 @@
-# ROS2_HUMBLE_IMAGE is the shared ROS 2 Humble image built by sim_build.sh.
+# 공통 ROS 2 이미지에 PX4 SITL·Gazebo와 simulation workspace를 설치·빌드하는 Dockerfile입니다.
+# sim_run.sh는 완성된 이미지의 PX4 실행 파일을 사용하고 커스텀 월드·모델을 실행 시점에 마운트합니다.
+# ROS2_HUMBLE_IMAGE: sim_build.sh가 먼저 빌드한 공통 ROS 2 이미지의 태그를 받아 FROM에서 사용합니다.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
 ########################################################################
-# simulation image
+# simulation 이미지 기반
 ########################################################################
-# This image adds PX4 SITL and the simulation workspace to ROS 2 Humble.
+# 전달받은 공통 ROS 2 이미지에서 시작해 이 서비스에 필요한 PX4·Gazebo와 workspace를 추가합니다.
 FROM ${ROS2_HUMBLE_IMAGE}
 
+# 이후 RUN에서 source로 ROS 환경을 로드할 수 있도록 실행 셸을 Bash로 지정합니다.
 SHELL ["/bin/bash", "-c"]
 
 ########################################################################
 # PX4 SITL
 ########################################################################
-# Copy the PX4 source that sim_build.sh prepared on the host.
+# sim_build.sh가 호스트에 준비한 PX4 소스를 Git 메타데이터·하위 모듈과 함께 이미지로 복사합니다.
 WORKDIR /DroneSimEnv
 COPY tools/_git_clones/PX4-Autopilot /DroneSimEnv/PX4-Autopilot
 
-# Install the packages PX4 needs, then make its helper tools available.
+# PX4 제공 설치 스크립트로 개발 도구와 Gazebo 시뮬레이션 의존성을 설치합니다.
 WORKDIR /DroneSimEnv/PX4-Autopilot
 RUN bash ./Tools/setup/ubuntu.sh
-# PATH lets the shell find PX4 helper tools installed for the root user.
+# PATH: 기존 검색 경로 앞에 /root/.local/bin을 붙여 root 사용자용으로 설치된 PX4 보조 명령을 찾습니다.
 ENV PATH="/root/.local/bin:${PATH}"
 
-# QT_X11_NO_MITSHM avoids shared-memory problems when using the host X11 display.
+# QT_X11_NO_MITSHM: Qt의 X11 공유 메모리 사용을 꺼 호스트 화면을 공유할 때의 표시 충돌을 줄입니다.
 ENV QT_X11_NO_MITSHM=1
 
-# Build PX4 SITL once while the Docker image is being made.
+# 이미지 빌드 중 px4_sitl 타깃을 컴파일해 실행 시 다시 빌드하지 않고 사용할 바이너리를 준비합니다.
 RUN make px4_sitl
 
 ########################################################################
-# simulation workspace
+# simulation ROS 2 workspace
 ########################################################################
-# Copy and build only this service's ROS 2 workspace.
+# simulation src를 전용 workspace에 복사하고 ROS 환경에서 rosdep·colcon으로 의존성 설치와 빌드를 수행합니다.
+# --symlink-install을 사용하고 workspace 환경 로드를 .bashrc에 추가해 새 root Bash 셸에서 패키지를 찾게 합니다.
 WORKDIR /DroneSimEnv/simulation_ws
 COPY simulation/simulation_ws/src /DroneSimEnv/simulation_ws/src
 RUN source /opt/ros/humble/setup.bash \
@@ -41,5 +45,6 @@ RUN source /opt/ros/humble/setup.bash \
     && rm -rf /var/lib/apt/lists/* \
     && echo "source /DroneSimEnv/simulation_ws/install/setup.bash" >> /root/.bashrc
 
+# 기본 컨테이너 명령은 PX4 소스 루트의 Bash이며, 실제 PX4 실행은 sim_run.sh가 tmux 창에서 시작합니다.
 WORKDIR /DroneSimEnv/PX4-Autopilot
 CMD ["/bin/bash"]

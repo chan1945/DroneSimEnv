@@ -1,16 +1,19 @@
-# Keep this project's Git history and local agent files out of Docker builds.
+# Docker 빌드 컨텍스트에서 로컬 메타데이터·생성 파일·실행 시 마운트할 리소스를 제외하는 설정입니다.
+# PX4 빌드에 필요한 Git 정보와 소스 내부 log 디렉터리는 제외하지 않도록 경로별 규칙을 사용합니다.
+
+# 프로젝트 자체의 Git 기록과 로컬 에이전트 설정은 빌드 컨텍스트로 보내지 않습니다.
 .git
 .agents
 .codex
 
-# PX4's Makefile and submodule checks need its real Git metadata during SITL builds.
-# The other cached repositories only provide source files to their images.
+# PX4의 Makefile·하위 모듈 검사는 실제 Git 메타데이터가 필요하므로 해당 경로는 예외 규칙으로 포함합니다.
+# 다른 캐시 저장소는 이미지에 소스만 제공하므로 자체 .git 디렉터리를 제외합니다.
 tools/_git_clones/px4_msgs/.git
 tools/_git_clones/Micro-XRCE-DDS-Agent/.git
 !tools/_git_clones/PX4-Autopilot/.git
 !tools/_git_clones/PX4-Autopilot/**/.git
 
-# Ignore only generated workspace output; PX4 dependencies contain source log directories.
+# PX4 의존성의 소스 log 폴더를 보존하도록 생성 파일 제외 규칙은 workspace·캐시별 정확한 경로로 한정합니다.
 drone/drone_ws/build
 drone/drone_ws/install
 drone/drone_ws/log
@@ -23,12 +26,12 @@ simulation/simulation_ws/log
 tools/_git_clones/PX4-Autopilot/build
 tools/_git_clones/Micro-XRCE-DDS-Agent/build
 
-# Downloaded Gazebo assets are mounted from the host when sim_run.sh starts.
+# sim_run.sh가 호스트에서 마운트하는 Gazebo 리소스는 빌드에서 제외하되 빈 경로용 .gitkeep은 포함합니다.
 simulation/simulation_ws/src/simulation_resources/worlds/*
 simulation/simulation_ws/src/simulation_resources/drone_models/*
 !simulation/simulation_ws/src/simulation_resources/worlds/.gitkeep
 !simulation/simulation_ws/src/simulation_resources/drone_models/.gitkeep
 
-# Editor and operating-system files are not needed inside images.
+# 운영체제 메타데이터와 편집기 임시 파일은 이미지에 필요하지 않으므로 제외합니다.
 .DS_Store
 *.swp
