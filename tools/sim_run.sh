@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
-# 사용자 지정 월드·드론 모델로 simulation, ground, drone 컨테이너를 실행하는 스크립트입니다.
-# CLI 인자와 리소스 파일을 검사하고, sim_build.sh로 만든 이미지를 실행해 xterm에서 tmux에 접속합니다.
+# PX4 내장 x500 모델과 기본 Gazebo 월드로 simulation, ground, drone 컨테이너를 실행하는 스크립트입니다.
+# CLI 인자를 검사하고, sim_build.sh로 만든 이미지를 실행해 xterm에서 tmux에 접속합니다.
 # 원래 터미널에서 키를 누르거나 종료 신호를 받으면 이 프로젝트의 컨테이너를 제거합니다.
 # 명령 실패, 미정의 변수 사용, 파이프라인 실패를 감지하면 실행을 중단합니다.
 set -euo pipefail
 
 # SCRIPT_DIR: BASH_SOURCE[0]의 부모를 절대 경로로 계산해 현재 작업 디렉터리와 무관하게 tools를 찾습니다.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# PROJECT_ROOT: SCRIPT_DIR의 상위 경로로, 호스트 workspace와 커스텀 리소스 경로를 조합할 때 사용합니다.
+# PROJECT_ROOT: SCRIPT_DIR의 상위 경로로, 컨테이너에 연결할 호스트 workspace 경로를 조합할 때 사용합니다.
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # SERVICES: 생성·삭제 대상인 세 컨테이너 이름을 배열로 보관해 정리 범위를 제한합니다.
@@ -25,108 +25,33 @@ GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
 CLEANUP_DONE=false
 # CLEANUP_ENABLED: 사전 검사가 끝나 컨테이너 변경을 시작할 때만 true가 되어 조기 삭제를 막습니다.
 CLEANUP_ENABLED=false
-# WORLD_NAME: --world에서 받은 확장자 없는 이름으로, 월드 SDF 경로와 PX4 환경변수를 구성합니다.
-WORLD_NAME=""
-# MODEL_NAME: --model에서 받은 폴더 이름으로, 커스텀 모델 경로와 Gazebo 생성 모델 이름을 구성합니다.
-MODEL_NAME=""
-# AIRFRAME_ID: 모델 이름과 별개로 PX4 제어 파라미터를 선택하며 --airframe으로 덮어쓸 수 있습니다.
-# 기본값 4001은 쿼드콥터 설정이므로 다른 기체는 구조·액추에이터 매핑에 맞는 ID를 지정해야 합니다.
-AIRFRAME_ID="4001"
-# WORLD_FILE: validate_resources가 찾은 호스트 SDF 절대 경로로, 컨테이너의 월드 파일에 직접 마운트합니다.
-WORLD_FILE=""
-# MODEL_DIR: 모델 루트와 MODEL_NAME을 조합한 호스트 경로로, 필수 모델 파일 두 개를 검사할 때 사용합니다.
-MODEL_DIR=""
 
-# usage: 인자 없이 호출하며 필수 리소스 인자, 검색 경로, 기체 설정 기본값을 표준 출력에 표시합니다.
+# usage: 인자 없이 호출하며 기본 실행·도움말 사용법과 PX4 내장 모델·월드를 표준 출력에 표시합니다.
 usage() {
     cat <<EOF
-Usage: $0 --world NAME --model NAME [--airframe ID]
+Usage:
+  $0
+  $0 --help
 
-World: simulation/simulation_ws/src/simulation_resources/worlds/NAME/NAME.sdf
-       or simulation/simulation_ws/src/simulation_resources/worlds/NAME.sdf
-Model: simulation/simulation_ws/src/simulation_resources/drone_models/NAME/model.sdf
-
-Resources are loaded from these host paths, including when their names match built-in assets.
---airframe selects PX4 flight parameters independently of the model (default: 4001, quadrotor).
+Runs PX4's built-in x500 model in the default Gazebo world.
 EOF
 }
 
-# parse_options: 전달받은 CLI 인자 배열을 순회하고 옵션·값 쌍을 전역 선택 변수에 저장합니다.
-# 정상 입력은 0, 잘못된 옵션·누락 값은 1, 도움말 요청은 2를 반환해 main이 실행 여부를 결정합니다.
+# parse_options: 인자 없는 기본 실행과 단일 도움말 옵션만 허용하고 다른 인자는 오류로 처리합니다.
+# 기본 실행은 0, 잘못된 입력은 1, 도움말 요청은 2를 반환해 main이 실행 여부를 결정합니다.
 parse_options() {
-    while [[ "$#" -gt 0 ]]; do
-        case "$1" in
-            --world|--model|--airframe)
-                # option: 현재 인자 $1을 보관해 값 검증 오류와 저장 대상 변수 선택에 같은 옵션명을 사용합니다.
-                local option="$1"
-                [[ "$#" -ge 2 && -n "$2" && "$2" != --* ]] || {
-                    echo "ERROR: ${option} requires a value." >&2
-                    usage >&2
-                    return 1
-                }
-                case "${option}" in
-                    --world) WORLD_NAME="$2" ;;
-                    --model) MODEL_NAME="$2" ;;
-                    --airframe) AIRFRAME_ID="$2" ;;
-                esac
-                shift 2
-                ;;
-            -h|--help)
-                usage
-                return 2
-                ;;
-            *)
-                echo "ERROR: unknown option: $1" >&2
-                usage >&2
-                return 1
-                ;;
-        esac
-    done
-
-    if [[ -z "${WORLD_NAME}" || -z "${MODEL_NAME}" ]]; then
-        echo "ERROR: 월드와 드론 모델을 모두 지정해야 합니다 (--world NAME --model NAME)." >&2
-        usage >&2
-        return 1
-    fi
-}
-
-# validate_resources: 전역 선택값의 이름 형식과 양수 airframe ID를 검사하고 호스트 리소스 경로를 확정합니다.
-# <이름>/<이름>.sdf를 먼저, <이름>.sdf를 다음으로 찾으며 필수 파일이 없으면 1을 반환합니다.
-validate_resources() {
-    # resource_root: 저장소 루트에 고정 리소스 경로를 붙여 월드·모델의 공통 호스트 디렉터리를 만듭니다.
-    local resource_root="${PROJECT_ROOT}/simulation/simulation_ws/src/simulation_resources"
-    # worlds_root: resource_root 아래 worlds에서 폴더형 또는 단일 파일형 월드 SDF를 찾습니다.
-    local worlds_root="${resource_root}/worlds"
-    # models_root: resource_root 아래 drone_models에서 MODEL_NAME과 일치하는 모델 폴더를 찾습니다.
-    local models_root="${resource_root}/drone_models"
-
-    [[ "${WORLD_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
-        echo "ERROR: invalid world name: ${WORLD_NAME}" >&2
-        return 1
-    }
-    [[ "${MODEL_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
-        echo "ERROR: invalid model name: ${MODEL_NAME}" >&2
-        return 1
-    }
-    [[ "${AIRFRAME_ID}" =~ ^[1-9][0-9]*$ ]] || {
-        echo "ERROR: --airframe must be a positive PX4 autostart ID." >&2
-        return 1
-    }
-
-    if [[ -f "${worlds_root}/${WORLD_NAME}/${WORLD_NAME}.sdf" ]]; then
-        WORLD_FILE="${worlds_root}/${WORLD_NAME}/${WORLD_NAME}.sdf"
-    elif [[ -f "${worlds_root}/${WORLD_NAME}.sdf" ]]; then
-        WORLD_FILE="${worlds_root}/${WORLD_NAME}.sdf"
-    else
-        echo "ERROR: world SDF was not found for '${WORLD_NAME}' in ${worlds_root}." >&2
-        return 1
+    if [[ "$#" -eq 0 ]]; then
+        return 0
     fi
 
-    MODEL_DIR="${models_root}/${MODEL_NAME}"
-    [[ -f "${MODEL_DIR}/model.sdf" && -f "${MODEL_DIR}/model.config" ]] || {
-        echo "ERROR: model.sdf and model.config were not found for '${MODEL_NAME}' in ${models_root}." >&2
-        return 1
-    }
+    if [[ "$#" -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+        usage
+        return 2
+    fi
+
+    echo "ERROR: unknown option: $1" >&2
+    usage >&2
+    return 1
 }
 
 # is_wsl2: /proc/version의 microsoft 문자열을 대소문자 구분 없이 검색해 WSL용 실행 옵션 적용 여부를 반환합니다.
@@ -236,7 +161,7 @@ configure_x11_access() {
 }
 
 # run_service: $1 서비스 이름, $2 이미지, $3 호스트 소스, $4 컨테이너 소스 경로로 Docker 컨테이너를 생성합니다.
-# 공통 실행 옵션에 simulation의 커스텀 리소스 연결과 WSLg 또는 X11 옵션을 추가해 백그라운드로 실행합니다.
+# 공통 실행 옵션에 simulation의 내장 모델 설정과 WSLg 또는 X11 옵션을 추가해 백그라운드로 실행합니다.
 run_service() {
     # service: $1에서 받은 이름으로 컨테이너를 식별하고 서비스별 옵션 적용 여부를 결정합니다.
     local service="$1"
@@ -274,26 +199,14 @@ run_service() {
     fi
 
     if [[ "${service}" == "simulation" ]]; then
-        # 커스텀 모델 루트를 PX4 모델 경로에 덮어 마운트해 내장 모델 파일을 가립니다.
-        # 선택한 월드 파일도 직접 읽기 전용으로 연결해 이미지의 기존 파일과 섞이지 않도록 합니다.
+        # 이미지에 포함된 PX4 기본 월드와 x500 모델을 사용하도록 고정된 환경변수를 전달합니다.
         run_args+=(
-            --volume "${PROJECT_ROOT}/simulation/simulation_ws/src/simulation_resources/drone_models:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/models:ro"
-            --volume "${WORLD_FILE}:/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/${WORLD_NAME}.sdf:ro"
-        )
-        # PX4에는 커스텀 리소스 이름과 기체 제어 설정을 독립적인 환경변수로 전달합니다.
-        run_args+=(
-            # PX4_GZ_WORLD: WORLD_NAME으로 연결한 SDF를 선택하고 Gazebo 월드 서비스 이름에 사용합니다.
-            --env "PX4_GZ_WORLD=${WORLD_NAME}"
-            # PX4_SIM_MODEL: PX4가 gz_ 접두사를 제거한 뒤 models/<MODEL_NAME>/model.sdf를 열도록 합니다.
-            --env "PX4_SIM_MODEL=gz_${MODEL_NAME}"
-            # PX4_SYS_AUTOSTART: AIRFRAME_ID로 제어 파라미터를 선택해 모델 이름 기반 내장 airframe 검색을 건너뜁니다.
-            --env "PX4_SYS_AUTOSTART=${AIRFRAME_ID}"
-            # PX4_SIMULATOR: PX4의 시뮬레이터 시작 스크립트가 Gazebo 연결 경로를 선택하도록 합니다.
-            --env "PX4_SIMULATOR=gz"
+            # PX4_GZ_WORLD: PX4 소스에 포함된 default.sdf 월드를 선택합니다.
+            --env "PX4_GZ_WORLD=default"
+            # PX4_SIM_MODEL: 내장 gz_x500 airframe을 선택하고 Gazebo의 x500 모델을 생성하도록 합니다.
+            --env "PX4_SIM_MODEL=gz_x500"
             # GZ_IP: Gazebo Transport가 호스트 네트워크의 루프백 주소를 통신 주소로 사용하도록 지정합니다.
             --env "GZ_IP=127.0.0.1"
-            # GZ_SIM_RESOURCE_PATH: 콜론으로 구분한 커스텀 월드·모델 경로에서 Gazebo가 URI 리소스를 찾도록 합니다.
-            --env "GZ_SIM_RESOURCE_PATH=/DroneSimEnv/simulation_ws/src/simulation_resources/worlds:/DroneSimEnv/simulation_ws/src/simulation_resources/worlds/${WORLD_NAME}:/DroneSimEnv/simulation_ws/src/simulation_resources/drone_models"
         )
     fi
 
@@ -364,7 +277,6 @@ main() {
         [[ "$?" -eq 2 ]] && return 0
         return 1
     }
-    validate_resources
 
     require_docker
     require_images

@@ -1,4 +1,4 @@
-# Docker 빌드 컨텍스트에서 로컬 메타데이터·생성 파일·실행 시 마운트할 리소스를 제외하는 설정입니다.
+# Docker 빌드 컨텍스트에서 로컬 메타데이터·생성 파일·별도로 내려받은 리소스를 제외하는 설정입니다.
 # PX4 빌드에 필요한 Git 정보와 소스 내부 log 디렉터리는 제외하지 않도록 경로별 규칙을 사용합니다.
 
 # 프로젝트 자체의 Git 기록과 로컬 에이전트 설정은 빌드 컨텍스트로 보내지 않습니다.
@@ -26,11 +26,9 @@ simulation/simulation_ws/log
 tools/_git_clones/PX4-Autopilot/build
 tools/_git_clones/Micro-XRCE-DDS-Agent/build
 
-# sim_run.sh가 호스트에서 마운트하는 Gazebo 리소스는 빌드에서 제외하되 빈 경로용 .gitkeep은 포함합니다.
+# 이전에 호스트에 내려받은 모델·월드 파일은 기본 시뮬레이션에서 사용하지 않으므로 빌드에서 제외합니다.
 simulation/simulation_ws/src/simulation_resources/worlds/*
 simulation/simulation_ws/src/simulation_resources/drone_models/*
-!simulation/simulation_ws/src/simulation_resources/worlds/.gitkeep
-!simulation/simulation_ws/src/simulation_resources/drone_models/.gitkeep
 
 # 운영체제 메타데이터와 편집기 임시 파일은 이미지에 필요하지 않으므로 제외합니다.
 .DS_Store

@@ -32,56 +32,16 @@ uses its graphics settings automatically.
 ```bash
 cd DroneSimEnv
 ./tools/sim_build.sh
-./tools/sim_run.sh --world walls --model x500
+./tools/sim_run.sh
 ```
 
-`--world` and `--model` are required. If either is missing, the run script exits
-with an error before touching Docker containers. Put downloaded Gazebo Harmonic
-resources in these paths before running it:
-
-```text
-simulation/simulation_ws/src/simulation_resources/
-├── worlds/
-│   └── walls/
-│       └── walls.sdf
-└── drone_models/
-    └── x500/
-        ├── model.config
-        ├── model.sdf
-        └── meshes/ ...
-```
-
-The world may also be a single `worlds/<name>.sdf` file. Pass the world name
-without `.sdf` and the model directory name. Resource names may contain letters,
-digits, underscores, and hyphens. The downloaded model must contain a PX4-compatible
-Gazebo SDF, including the sensors and motor plugins expected by its PX4 airframe.
-The SDF `<world name>` must match `--world` because PX4 uses it for Gazebo service
-lookup. PX4 spawns the selected model as `<model directory name>_0`.
-
-The script mounts the host `drone_models` directory over PX4's model directory
-and mounts the selected world SDF directly at PX4's world file path, both read-only.
-The selected files are used even if their names match built-in PX4 resources.
-Place any models referenced by `model://` URIs in `drone_models` as well; built-in
-model files are hidden by the mount.
-
-PX4 flight parameters are selected independently of the custom model name.
-`--airframe` defaults to `4001`, a quadrotor configuration. Use an appropriate PX4
-autostart ID for the vehicle's rotor layout and actuator mapping, for example:
-
-```bash
-./tools/sim_run.sh --world walls --model custom_quad --airframe 4001
-```
-
-`PX4_SIM_MODEL=gz_custom_quad` tells PX4 to open the mounted
-`models/custom_quad/model.sdf`; it does not require a built-in model named
-`custom_quad`. The explicit `PX4_SYS_AUTOSTART` setting avoids matching the custom
-model name against built-in airframes. Choosing an airframe does not replace the
-custom model SDF.
+The run script uses PX4's built-in `x500` model and the default Gazebo world
+included in the simulation image. Run it without arguments, or use `--help` to
+show usage information.
 
 The script starts PX4 SITL and Gazebo in the simulation container's `px4` tmux
 window. Use `Ctrl+B`, then `0` to switch to the simulation shell, and `Ctrl+B`,
-then `1` to return to PX4. Model and world files are loaded from the host at run
-time, so adding or changing them does not require rebuilding the images.
+then `1` to return to PX4.
 
 The build script first prepares external Git sources in `tools/_git_clones`.
 It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and
