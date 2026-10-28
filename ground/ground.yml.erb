@@ -5,6 +5,11 @@ name: ground
 # root: 새 tmux 창의 시작 디렉터리를 컨테이너의 ground ROS 2 workspace로 지정합니다.
 root: /DroneSimEnv/ground_ws
 
+# on_project_start: tmux가 로그인 셸을 열기 전에 이름이 없는 보조 그룹을 컨테이너에 등록합니다.
+# group_id: id -G에서 읽은 현재 프로세스의 숫자 GID이며, 미등록 GID만 host-gid-<GID> 이름으로 추가합니다.
+# GPU 런타임이 전달한 그룹의 권한·ID는 유지하고 Bash의 groups 경고를 방지합니다.
+on_project_start: for group_id in $(id -G); do if ! getent group "$group_id" >/dev/null; then groupadd --gid "$group_id" "host-gid-$group_id"; fi; done
+
 # windows: 목록의 순서대로 QGC 출력 창과 별도 대화형 셸 창을 생성합니다.
 windows:
   # qgc: GUI 환경이 있으면 gosu로 qgcuser에 전환해 QGC를 실행하고 해당 창에 출력을 남깁니다.

@@ -16,14 +16,17 @@ SHELL ["/bin/bash", "-c"]
 # QGroundControl 실행 도구
 ########################################################################
 # QGC의 사용자 전환·화면·영상·오디오 라이브러리와 tmuxinator용 Ruby를 설치하고 apt 목록을 정리합니다.
+# Qt 멀티미디어의 PipeWire 라이브러리와 speechd 플러그인의 라이브러리·음성 합성 서비스를 함께 설치합니다.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     gstreamer1.0-gl \
     gstreamer1.0-libav \
     gstreamer1.0-plugins-bad \
     libfuse2 \
+    libpipewire-0.3-0 \
     libpulse-mainloop-glib0 \
     libqt5gui5 \
+    libspeechd2 \
     libx11-xcb1 \
     libxcb-cursor0 \
     libxcb-glx0 \
@@ -39,6 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     net-tools \
     ruby \
+    speech-dispatcher \
+    speech-dispatcher-espeak-ng \
     vim \
     && rm -rf /var/lib/apt/lists/*
 

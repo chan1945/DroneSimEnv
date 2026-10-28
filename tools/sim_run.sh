@@ -160,6 +160,23 @@ configure_x11_access() {
     fi
 }
 
+# configure_container_groups: $1 컨테이너의 실행 프로세스와 PID 1의 그룹 중 이름이 없는 GID를 등록합니다.
+# --user root로 실행한 exec는 GPU 보조 그룹을 상속하지 않으므로 /proc/1/status에서도 실제 GID를 읽습니다.
+# 그룹의 숫자 ID와 권한은 유지하고 이름만 추가해 tmux 로그인 셸의 groups 경고를 방지합니다.
+configure_container_groups() {
+    # service: $1의 컨테이너 이름을 docker exec에 전달해 해당 컨테이너의 그룹 데이터베이스만 수정합니다.
+    local service="$1"
+
+    docker exec --user root "${service}" /bin/sh -c '
+        # group_id: 현재 exec와 GPU 그룹을 상속한 PID 1의 숫자 GID를 순회해 이름 등록 여부를 확인합니다.
+        for group_id in $(id -G) $(sed -n "s/^Groups:[[:space:]]*//p" /proc/1/status); do
+            if ! getent group "$group_id" >/dev/null; then
+                groupadd --gid "$group_id" "host-gid-$group_id"
+            fi
+        done
+    '
+}
+
 # run_service: $1 서비스 이름, $2 이미지, $3 호스트 소스, $4 컨테이너 소스 경로로 Docker 컨테이너를 생성합니다.
 # 공통 실행 옵션에 simulation의 내장 모델 설정과 WSLg 또는 X11 옵션을 추가해 백그라운드로 실행합니다.
 run_service() {
@@ -240,6 +257,11 @@ run_service() {
 
     echo "Creating and starting ${service}..."
     docker run "${run_args[@]}" "${image}" >/dev/null
+
+    # ground는 tmuxinator의 시작 훅에서 셸 생성 전에 그룹을 등록하므로 중복 실행하지 않습니다.
+    if [[ "${service}" != "ground" ]]; then
+        configure_container_groups "${service}"
+    fi
 }
 
 # start_px4: simulation 컨테이너에 shell·px4 tmux 창을 만들고 PX4 실행 파일과 Enter 키를 전송합니다.
