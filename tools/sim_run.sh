@@ -21,6 +21,8 @@ SIMULATION_IMAGE="dronesimenv/simulation:cuda${CUDA_VERSION}"
 DRONE_IMAGE="dronesimenv/drone:cuda${CUDA_VERSION}"
 # GROUND_IMAGE: CUDA_VERSION을 태그에 넣어 QGroundControl 이미지의 로컬 이름을 구성합니다.
 GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
+# QGC_DEFAULT_INI: 실행할 때마다 복사할 레포의 기본 설정 파일을 읽기 전용 마운트 원본으로 사용합니다.
+QGC_DEFAULT_INI="${PROJECT_ROOT}/ground/QGroundControl.ini"
 # CLEANUP_DONE: cleanup이 정리를 시작하면 true가 되어 종료 신호가 겹쳐도 중복 삭제를 막습니다.
 CLEANUP_DONE=false
 # CLEANUP_ENABLED: 사전 검사가 끝나 컨테이너 변경을 시작할 때만 true가 되어 조기 삭제를 막습니다.
@@ -215,6 +217,13 @@ run_service() {
         run_args+=(--shm-size 2g)
     fi
 
+    if [[ "${service}" == "ground" ]]; then
+        # 기본 INI만 읽기 전용으로 연결하고 사용자 설정은 컨테이너 내부에 두어 컨테이너 삭제 시 함께 지웁니다.
+        run_args+=(
+            --mount "type=bind,source=${QGC_DEFAULT_INI},target=/opt/dronesimenv/defaults/QGroundControl.ini,readonly"
+        )
+    fi
+
     if [[ "${service}" == "simulation" ]]; then
         # 이미지에 포함된 PX4 기본 월드와 x500 모델을 사용하도록 고정된 환경변수를 전달합니다.
         run_args+=(
@@ -303,6 +312,12 @@ main() {
     require_docker
     require_images
     require_xterm
+
+    # 마운트 원본을 컨테이너 변경 전에 검사해 파일 누락으로 기존 실행 환경이 먼저 삭제되는 일을 막습니다.
+    if [[ ! -f "${QGC_DEFAULT_INI}" || ! -r "${QGC_DEFAULT_INI}" ]]; then
+        echo "ERROR: QGroundControl default INI is missing or unreadable: ${QGC_DEFAULT_INI}" >&2
+        return 1
+    fi
     configure_x11_access
 
     # 사전 검사가 끝난 뒤 정리를 활성화하고 같은 이름의 기존 컨테이너를 제거해 새로 실행합니다.

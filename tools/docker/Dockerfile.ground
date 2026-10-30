@@ -1,5 +1,5 @@
 # QGroundControl 5.0.8과 ground ROS 2 workspace를 설치하고 tmuxinator로 QGC·shell 창을 여는 Dockerfile입니다.
-# QGC는 일반 사용자로 실행하며, 시작 명령과 GUI 환경 유무 검사는 ground.yml.erb에서 관리합니다.
+# QGC는 일반 사용자로 실행하며, 기본 INI 초기화·시작 명령·GUI 환경 검사는 ground.yml.erb에서 관리합니다.
 # ROS2_HUMBLE_IMAGE: sim_build.sh가 먼저 만든 공통 ROS 2 이미지의 태그를 받아 FROM에서 사용합니다.
 ARG ROS2_HUMBLE_IMAGE=dronesimenv/ros2_humble:cuda13.3.0-humble
 
@@ -89,6 +89,9 @@ RUN source /opt/ros/humble/setup.bash \
 # QGroundControl 시작 설정
 ########################################################################
 WORKDIR /DroneSimEnv/ground_ws
+# 시작할 때마다 사용자 설정으로 복사할 기본 INI를 포함해 이미지 단독 실행도 지원합니다.
+# sim_run.sh는 같은 경로에 레포의 INI를 읽기 전용으로 연결해 기본값 변경 시 재빌드를 생략합니다.
+COPY ground/QGroundControl.ini /opt/dronesimenv/defaults/QGroundControl.ini
 # tmuxinator 프로젝트 파일을 workspace에 복사하고 컨테이너 시작 시 해당 설정으로 ground 세션에 접속합니다.
 COPY ground/ground.yml.erb /DroneSimEnv/ground_ws/ground.yml.erb
 ENTRYPOINT ["tmuxinator", "start", "-p", "/DroneSimEnv/ground_ws/ground.yml.erb"]
