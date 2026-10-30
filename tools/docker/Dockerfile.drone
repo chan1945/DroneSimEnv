@@ -1,4 +1,5 @@
 # 공통 CUDA·ROS 2 이미지와 DDS Agent·Gazebo 브리지를 포함한 drone 이미지를 단계별로 빌드하는 Dockerfile입니다.
+# 최종 drone 이미지는 drone.yml을 읽어 Agent 로그·작업용 셸로 나눈 tmux 세션을 자동으로 시작합니다.
 # sim_build.sh가 base_amd64, ros2_humble, drone 타깃을 각각 빌드하고 공통 ROS 이미지를 서비스에 전달합니다.
 # CUDA_IMAGE: base_amd64의 FROM에 사용할 NVIDIA CUDA·cuDNN·Ubuntu 기본 이미지를 빌드 인자로 선택합니다.
 ARG CUDA_IMAGE=nvcr.io/nvidia/cuda:13.3.0-cudnn-runtime-ubuntu22.04
@@ -125,6 +126,17 @@ RUN source /opt/ros/humble/setup.bash \
     && rm -rf /var/lib/apt/lists/* \
     && echo "source /DroneSimEnv/drone_ws/install/setup.bash" >> /root/.bashrc
 
-# 컨테이너 기본 실행은 저장소 작업 경로의 Bash이며, sim_run.sh의 대화형 옵션으로 입력 연결을 유지합니다.
-WORKDIR /DroneSimEnv
-CMD ["/bin/bash"]
+########################################################################
+# Drone tmux 시작 설정
+########################################################################
+# 최종 drone 스테이지에만 Ruby를 설치해 공통 이미지와 다른 서비스의 의존성은 늘리지 않습니다.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ruby \
+    && rm -rf /var/lib/apt/lists/*
+# 검증할 tmuxinator 버전을 고정해 YAML의 pane 구성과 시작 설정을 같은 구현으로 해석합니다.
+RUN gem install tmuxinator --version 3.4.2 --no-document
+
+# 컨테이너 시작 시 YAML의 그룹 초기화·좌우 분할·Agent 실행을 수행하고 drone 세션에 접속합니다.
+WORKDIR /DroneSimEnv/drone_ws
+COPY drone/drone.yml /DroneSimEnv/drone.yml
+ENTRYPOINT ["tmuxinator", "start", "-p", "/DroneSimEnv/drone.yml"]

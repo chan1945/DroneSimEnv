@@ -43,6 +43,16 @@ The script starts PX4 SITL and Gazebo in the simulation container's `px4` tmux
 window. Use `Ctrl+B`, then `0` to switch to the simulation shell, and `Ctrl+B`,
 then `1` to return to PX4.
 
+The Drone terminal uses `drone/drone.yml` to create a tmux window with two
+side-by-side panes. The left pane automatically runs `MicroXRCEAgent udp4 -p 8888`
+and displays its logs. The right pane opens a shell in `/DroneSimEnv/drone_ws`
+and is selected initially. The port matches PX4 SITL's default DDS client port.
+
+Press `Ctrl+B`, then an arrow key to move between panes. Press `Ctrl+B`, then
+`Z` to zoom the selected pane or restore the split layout. If the Agent exits,
+its pane remains available as a shell so you can inspect its output and restart
+it. Reconnecting to the existing `drone` session does not start another Agent.
+
 The build script first prepares external Git sources in `tools/_git_clones`.
 It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and
 Micro-XRCE-DDS-Agent v2.4.3. Later builds reuse valid cached copies and only

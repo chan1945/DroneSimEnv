@@ -258,8 +258,8 @@ run_service() {
     echo "Creating and starting ${service}..."
     docker run "${run_args[@]}" "${image}" >/dev/null
 
-    # ground는 tmuxinator의 시작 훅에서 셸 생성 전에 그룹을 등록하므로 중복 실행하지 않습니다.
-    if [[ "${service}" != "ground" ]]; then
+    # drone과 ground는 YAML 시작 훅에서 셸 생성 전에 그룹을 등록하므로 simulation만 여기서 처리합니다.
+    if [[ "${service}" == "simulation" ]]; then
         configure_container_groups "${service}"
     fi
 }
