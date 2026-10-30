@@ -6,6 +6,11 @@ read-only. Before starting QGC, `ground/ground.yml.erb` copies it to
 `/home/qgcuser/.config/QGroundControl/QGroundControl.ini`, replacing any existing
 user INI on each startup. The copy and QGC both run as `qgcuser`.
 
+The default INI sets `firstRunPromptIdsShown="1,2"` to skip the Measurement
+Units and Vehicle Information first-run dialogs in QGC 5.0.8. Units and the
+offline vehicle defaults come from the INI. Remove this entry to show the
+dialogs again on the next simulation run.
+
 Settings changed in QGC are stored only inside the running container. Stopping
 `sim_run.sh` removes the containers and their user settings. The next run starts
 from the repository defaults again. Reconnecting to an existing tmux session
