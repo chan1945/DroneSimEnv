@@ -1,0 +1,62 @@
+# Simulation의 Gazebo 토픽을 ROS 2 토픽으로 변환하는 Humble·Harmonic용 브리지 설정입니다.
+# gz_x500_depth의 실제 토픽을 기준으로 하며 모든 연결은 Gazebo에서 ROS로만 데이터를 전달합니다.
+
+# 시뮬레이션 시계는 항상 변환해 Drone의 RViz와 ROS 노드가 같은 시각을 사용하게 합니다.
+# ros_topic_name: ROS 노드가 구독하는 시계 토픽입니다.
+- ros_topic_name: /clock
+  # gz_topic_name: 단일 Gazebo 월드가 발행하는 공통 시계 토픽입니다.
+  gz_topic_name: /clock
+  # ros_type_name: ROS 2 시뮬레이션 시계 메시지 타입입니다.
+  ros_type_name: rosgraph_msgs/msg/Clock
+  # gz_type_name: Gazebo Transport의 원본 시계 메시지 타입입니다.
+  gz_type_name: gz.msgs.Clock
+  # direction: ROS 쪽 시계를 Gazebo에 되돌려 발행하지 않도록 단방향으로 지정합니다.
+  direction: GZ_TO_ROS
+
+# 깊이 영상은 RViz나 사용자 노드가 구독할 때만 변환합니다.
+# ros_topic_name: ROS에서 깊이 영상을 구독할 표준 카메라 경로입니다.
+- ros_topic_name: /camera/depth/image_raw
+  # gz_topic_name: OakD-Lite의 StereoOV7251 센서가 발행하는 실제 깊이 영상 토픽입니다.
+  gz_topic_name: /depth_camera
+  # ros_type_name: 깊이 영상을 담을 ROS 2 Image 타입입니다.
+  ros_type_name: sensor_msgs/msg/Image
+  # gz_type_name: Gazebo의 원본 영상 메시지 타입입니다.
+  gz_type_name: gz.msgs.Image
+  # direction: 센서 메시지를 Gazebo에서 ROS로 전달합니다.
+  direction: GZ_TO_ROS
+  # publisher_queue: 큰 영상이 오래 쌓이지 않도록 ROS 발행 큐를 한 장으로 제한합니다.
+  publisher_queue: 1
+  # lazy: ROS 구독자가 있을 때만 Gazebo를 구독해 사용하지 않는 영상의 변환 비용을 줄입니다.
+  lazy: true
+
+# 깊이 카메라의 내부 보정 정보를 영상과 같은 ROS 경로에 제공합니다.
+# ros_topic_name: 깊이 영상에 대응하는 ROS 카메라 정보 토픽입니다.
+- ros_topic_name: /camera/depth/camera_info
+  # gz_topic_name: 현재 깊이 센서가 발행하는 640×480 카메라 정보 토픽입니다.
+  gz_topic_name: /camera_info
+  # ros_type_name: ROS 2 카메라 해상도·보정 행렬 메시지 타입입니다.
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  # gz_type_name: Gazebo의 원본 카메라 정보 타입입니다.
+  gz_type_name: gz.msgs.CameraInfo
+  # direction: 카메라 정보를 Gazebo에서 ROS로 전달합니다.
+  direction: GZ_TO_ROS
+  # publisher_queue: 가장 최근 카메라 정보만 큐에 유지합니다.
+  publisher_queue: 1
+  # lazy: ROS 구독자가 있을 때 카메라 정보 변환을 시작합니다.
+  lazy: true
+
+# 깊이 센서의 포인트클라우드를 RViz PointCloud2 표시에서 사용할 수 있게 합니다.
+# ros_topic_name: ROS에서 깊이 포인트클라우드를 구독할 경로입니다.
+- ros_topic_name: /camera/depth/points
+  # gz_topic_name: 깊이 영상과 함께 Gazebo가 발행하는 포인트클라우드 토픽입니다.
+  gz_topic_name: /depth_camera/points
+  # ros_type_name: RViz에서 구독할 수 있는 ROS 2 PointCloud2 타입입니다.
+  ros_type_name: sensor_msgs/msg/PointCloud2
+  # gz_type_name: Gazebo의 바이너리 포인트 배열 메시지 타입입니다.
+  gz_type_name: gz.msgs.PointCloudPacked
+  # direction: 포인트클라우드를 Gazebo에서 ROS로 전달합니다.
+  direction: GZ_TO_ROS
+  # publisher_queue: 큰 포인트클라우드를 누적하지 않고 최근 프레임만 유지합니다.
+  publisher_queue: 1
+  # lazy: 구독자가 없는 동안 포인트클라우드 변환과 ROS 발행을 생략합니다.
+  lazy: true

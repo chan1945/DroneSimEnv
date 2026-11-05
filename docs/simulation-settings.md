@@ -1,8 +1,9 @@
 # Simulation settings
 
 `simulation/simulation.yml` defines the simulation container's tmux session,
-PX4 model, Gazebo world and PX4 startup command. It uses tmuxinator, matching
-the Drone and Ground startup configurations.
+PX4 model, Gazebo world and PX4 startup command. It also starts the ROS-Gazebo
+bridge in window `2` (`bridge`). See [ROS-Gazebo bridge](ros-gz-bridge.md) for
+topic mappings and cross-container ROS communication.
 
 Change the exports in `pre_window` to select a model and world:
 
@@ -12,13 +13,14 @@ Change the exports in `pre_window` to select a model and world:
 # PX4_GZ_WORLD: Select a built-in world by filename without the .sdf suffix.
 # GZ_IP: Use the loopback address for Gazebo Transport communication.
 pre_window:
-  - export PX4_SIM_MODEL=gz_x500
-  - export PX4_GZ_WORLD=default
+  - export PX4_SIM_MODEL=gz_x500_depth
+  - export PX4_GZ_WORLD=walls
   - export GZ_IP=127.0.0.1
 ```
 
 Models must have matching PX4 airframes and Gazebo model resources in the
-simulation image. The default `gz_x500` selects x500. World names refer to
+simulation image. The current `gz_x500_depth` selects x500 with its depth
+camera. World names refer to
 `/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/<name>.sdf`; for example,
 `default`, `walls` and `windy`. The settings select PX4's built-in resources.
 
@@ -34,6 +36,8 @@ session. Window `0` (`shell`) starts in `/DroneSimEnv/simulation_ws`. Window `1`
 (`px4`) starts in the PX4 build's `rootfs` directory and is selected initially.
 PX4 starts Gazebo using the selected model and world. Closing an xterm window
 or reconnecting to the existing session does not launch a second PX4 process.
+The bridge starts alongside PX4 and connects as Gazebo topics become available.
+It uses the same `GZ_IP` and any inherited `GZ_PARTITION` as PX4.
 
 Empty model/world values and missing world SDF files are reported in the PX4
 window before PX4 launches. PX4 reports unknown airframe names in its startup

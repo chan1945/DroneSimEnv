@@ -20,9 +20,9 @@ CUDA_VERSION="13.3.0"
 BASE_IMAGE="dronesimenv/base_amd64:cuda${CUDA_VERSION}"
 # ROS2_HUMBLE_IMAGE: CUDA·Humble 버전을 태그에 넣은 공통 ROS 2 이미지이며 서비스 빌드 인자로도 전달합니다.
 ROS2_HUMBLE_IMAGE="dronesimenv/ros2_humble:cuda${CUDA_VERSION}-humble"
-# SIMULATION_IMAGE: 공통 ROS 2 이미지에 PX4·Gazebo를 추가한 결과를 저장할 서비스 이미지 태그입니다.
+# SIMULATION_IMAGE: 공통 ROS 2 이미지에 PX4·Gazebo·ROS-Gazebo 브리지를 추가한 서비스 이미지 태그입니다.
 SIMULATION_IMAGE="dronesimenv/simulation:cuda${CUDA_VERSION}"
-# DRONE_IMAGE: 공통 ROS 2 이미지에 DDS Agent·Gazebo 브리지·workspace를 추가한 결과의 이미지 태그입니다.
+# DRONE_IMAGE: 공통 ROS 2 이미지에 DDS Agent·PX4 메시지·사용자 workspace를 추가한 서비스 이미지 태그입니다.
 DRONE_IMAGE="dronesimenv/drone:cuda${CUDA_VERSION}"
 # GROUND_IMAGE: 공통 ROS 2 이미지에 QGroundControl·workspace를 추가한 결과를 저장할 이미지 태그입니다.
 GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"

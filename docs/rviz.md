@@ -27,11 +27,21 @@ Read the latest RViz output from another host terminal with:
 docker exec drone tmux capture-pane -p -J -S -100 -t drone:rviz
 ```
 
-RViz initially opens its default view. Displaying the simulated drone, depth
-images or point clouds requires suitable ROS topics and coordinate transforms
-(TF). The `gz_x500_depth` Gazebo sensor data needs a ROS-Gazebo bridge before
-RViz can subscribe to it. Configure the RViz displays and Fixed Frame for the
-data you publish. This startup configuration launches the viewer only.
+RViz uses simulation time (`use_sim_time=true`) from the `/clock` topic
+published by the [ROS-Gazebo bridge](ros-gz-bridge.md) in the Simulation
+container. Until that clock is available, RViz waits for simulation time.
+
+RViz initially opens its default view. Add an Image display for
+`/camera/depth/image_raw`, or a PointCloud2 display for `/camera/depth/points`.
+Use Best Effort reliability to accept sensor data from the bridge. For the
+point cloud, set Fixed Frame to the received `header.frame_id` to view data in
+the camera's own frame. Displaying the camera relative to the world or a robot
+model additionally requires the appropriate TF transforms. The bridge passes
+the sensor frame ID through; it does not create robot transforms.
+
+For the current `gz_x500_depth` model, the received camera frame is
+`x500_depth_0/camera_link/StereoOV7251`. Recheck the message header when changing
+models, sensors or instance names.
 
 Run `./tools/sim_build.sh` after changing `drone/drone.yml`, because the Drone
 image includes a copy of this file. Then run `./tools/sim_run.sh`.

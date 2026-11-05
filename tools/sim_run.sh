@@ -23,6 +23,8 @@ DRONE_IMAGE="dronesimenv/drone:cuda${CUDA_VERSION}"
 GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
 # SIMULATION_CONFIG: 모델·월드·PX4 실행을 정의한 레포 YAML을 Simulation에 읽기 전용으로 연결합니다.
 SIMULATION_CONFIG="${PROJECT_ROOT}/simulation/simulation.yml"
+# SIMULATION_BRIDGE_CONFIG: Gazebo 토픽을 ROS 2 메시지로 변환하는 매핑 파일의 읽기 전용 마운트 원본입니다.
+SIMULATION_BRIDGE_CONFIG="${PROJECT_ROOT}/simulation/ros_gz_bridge.yaml"
 # QGC_DEFAULT_INI: 실행할 때마다 복사할 레포의 기본 설정 파일을 읽기 전용 마운트 원본으로 사용합니다.
 QGC_DEFAULT_INI="${PROJECT_ROOT}/ground/QGroundControl.ini"
 # CLEANUP_DONE: cleanup이 정리를 시작하면 true가 되어 종료 신호가 겹쳐도 중복 삭제를 막습니다.
@@ -185,6 +187,8 @@ run_service() {
         # 호스트 네트워크와 IPC를 공유해 세 컨테이너 사이의 통신 경로를 맞춥니다.
         --network host
         --ipc host
+        # ROS_DOMAIN_ID: 호스트에서 지정한 도메인 또는 기본값 0을 모든 서비스에 동일하게 전달합니다.
+        --env "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}"
         --gpus all
         # QT_X11_NO_MITSHM: Qt의 X11 공유 메모리 사용을 꺼 컨테이너의 화면 표시 충돌을 줄입니다.
         --env "QT_X11_NO_MITSHM=1"
@@ -213,6 +217,7 @@ run_service() {
         # 모델·월드·PX4 실행을 정의한 YAML을 연결해 설정 변경을 다음 컨테이너 실행부터 반영합니다.
         run_args+=(
             --mount "type=bind,source=${SIMULATION_CONFIG},target=/DroneSimEnv/simulation.yml,readonly"
+            --mount "type=bind,source=${SIMULATION_BRIDGE_CONFIG},target=/DroneSimEnv/ros_gz_bridge.yaml,readonly"
         )
     fi
 
@@ -280,6 +285,10 @@ main() {
     # 마운트 원본을 컨테이너 변경 전에 검사해 파일 누락으로 기존 실행 환경이 먼저 삭제되는 일을 막습니다.
     if [[ ! -f "${SIMULATION_CONFIG}" || ! -r "${SIMULATION_CONFIG}" ]]; then
         echo "ERROR: Simulation YAML is missing or unreadable: ${SIMULATION_CONFIG}" >&2
+        return 1
+    fi
+    if [[ ! -f "${SIMULATION_BRIDGE_CONFIG}" || ! -r "${SIMULATION_BRIDGE_CONFIG}" ]]; then
+        echo "ERROR: ROS-Gazebo bridge YAML is missing or unreadable: ${SIMULATION_BRIDGE_CONFIG}" >&2
         return 1
     fi
     if [[ ! -f "${QGC_DEFAULT_INI}" || ! -r "${QGC_DEFAULT_INI}" ]]; then

@@ -36,7 +36,7 @@ cd DroneSimEnv
 ```
 
 `simulation/simulation.yml` selects the PX4 model and Gazebo world. The default
-configuration uses the built-in `x500` model and `default` world. Edit this YAML
+configuration uses the built-in `x500_depth` model and `walls` world. Edit this YAML
 and restart `sim_run.sh` to change them without rebuilding the image. See
 [Simulation settings](docs/simulation-settings.md) for configuration and logs.
 Run `sim_run.sh` without arguments, or use `--help` to show usage information.
@@ -59,6 +59,10 @@ RViz2 opens automatically from the Drone container when a GUI display is
 available. Its output appears in a separate `rviz` tmux window; press `Ctrl+B`,
 then `1` in the Drone terminal to view it. See [RViz2](docs/rviz.md) for startup,
 logs and visualization setup.
+
+The Simulation container also runs the [ROS-Gazebo bridge](docs/ros-gz-bridge.md)
+to publish the simulation clock and depth camera data as ROS 2 topics. Drone
+nodes and RViz2 receive those topics through the shared ROS domain.
 
 The build script first prepares external Git sources in `tools/_git_clones`.
 It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and
@@ -112,6 +116,7 @@ and how settings are reset between runs.
 simulation
 ├─PX4 v1.16.2
 ├─Gazebo Harmonic
+├─ROS-Gazebo bridge
 
 ground
 ├─QGroundControl
@@ -120,6 +125,7 @@ drone
 ├─ROS2 Humble
 ├─px4_msgs release/1.16
 ├─Micro XRCE DDS Agent v2.4.3
+├─RViz2
 ```
 
 ## Image architecture
