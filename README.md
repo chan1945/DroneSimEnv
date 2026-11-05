@@ -35,13 +35,15 @@ cd DroneSimEnv
 ./tools/sim_run.sh
 ```
 
-The run script uses PX4's built-in `x500` model and the default Gazebo world
-included in the simulation image. Run it without arguments, or use `--help` to
-show usage information.
+`simulation/simulation.yml` selects the PX4 model and Gazebo world. The default
+configuration uses the built-in `x500` model and `default` world. Edit this YAML
+and restart `sim_run.sh` to change them without rebuilding the image. See
+[Simulation settings](docs/simulation-settings.md) for configuration and logs.
+Run `sim_run.sh` without arguments, or use `--help` to show usage information.
 
-The script starts PX4 SITL and Gazebo in the simulation container's `px4` tmux
-window. Use `Ctrl+B`, then `0` to switch to the simulation shell, and `Ctrl+B`,
-then `1` to return to PX4.
+The simulation container starts tmuxinator from this YAML and runs PX4 SITL
+and Gazebo in its `px4` tmux window. Use `Ctrl+B`, then `0` to switch to the
+simulation shell, and `Ctrl+B`, then `1` to return to PX4.
 
 The Drone terminal uses `drone/drone.yml` to create a tmux window with two
 side-by-side panes. The left pane automatically runs `MicroXRCEAgent udp4 -p 8888`
@@ -52,6 +54,11 @@ Press `Ctrl+B`, then an arrow key to move between panes. Press `Ctrl+B`, then
 `Z` to zoom the selected pane or restore the split layout. If the Agent exits,
 its pane remains available as a shell so you can inspect its output and restart
 it. Reconnecting to the existing `drone` session does not start another Agent.
+
+RViz2 opens automatically from the Drone container when a GUI display is
+available. Its output appears in a separate `rviz` tmux window; press `Ctrl+B`,
+then `1` in the Drone terminal to view it. See [RViz2](docs/rviz.md) for startup,
+logs and visualization setup.
 
 The build script first prepares external Git sources in `tools/_git_clones`.
 It clones PX4 v1.16.2 with its submodules, px4_msgs `release/1.16`, and

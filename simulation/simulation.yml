@@ -1,0 +1,44 @@
+# Simulation 컨테이너의 모델·월드를 선택하고 작업용 셸과 PX4 실행 창을 만드는 tmuxinator 설정입니다.
+# Docker ENTRYPOINT가 이 파일을 읽으며 sim_run.sh가 레포의 설정을 읽기 전용으로 연결합니다.
+
+# name: sim_run.sh의 서비스 이름과 같은 세션을 만들어 xterm이 기존 실행 화면에 접속하게 합니다.
+name: simulation
+# root: 작업용 셸을 시작할 Simulation ROS 2 workspace 경로입니다.
+root: /DroneSimEnv/simulation_ws
+# startup_window: 시작 시 PX4 실행 로그와 명령 프롬프트를 표시하는 창을 선택합니다.
+startup_window: px4
+
+# pre_window: 모든 창에서 아래 환경변수를 먼저 설정한 뒤 해당 창의 명령을 실행합니다.
+# PX4_SIM_MODEL: PX4에 포함된 Gazebo airframe 이름이며 gz_x500은 x500 모델을 선택합니다.
+# PX4_GZ_WORLD: PX4의 Tools/simulation/gz/worlds 아래 SDF 파일명에서 .sdf를 제외한 월드 이름입니다.
+# GZ_IP: Gazebo Transport의 통신 주소를 호스트 네트워크에서 사용할 루프백 주소로 지정합니다.
+pre_window:
+  - export PX4_SIM_MODEL=gz_x500_depth
+  - export PX4_GZ_WORLD=walls
+  - export GZ_IP=127.0.0.1
+
+# on_project_start: tmux 로그인 셸 생성 전에 GPU 런타임이 전달한 미등록 그룹 이름을 추가합니다.
+# group_id: 현재 프로세스와 PID 1의 숫자 GID를 순회해 이름이 없을 때만 host-gid-<GID>로 등록합니다.
+# root docker exec에서 누락될 수 있는 GPU 보조 그룹도 PID 1의 목록에서 확인합니다.
+on_project_start: for group_id in $(id -G) $(sed -n "s/^Groups:[[:space:]]*//p" /proc/1/status); do if ! getent group "$group_id" >/dev/null; then groupadd --gid "$group_id" "host-gid-$group_id"; fi; done
+
+# windows: 기존 번호를 유지하도록 shell 창을 먼저 만들고 px4 창을 두 번째로 생성합니다.
+windows:
+  # shell: 추가 명령 없이 ROS 환경이 로드된 대화형 작업 셸을 유지합니다.
+  - shell:
+  # px4: rootfs에서 초기화 파일을 찾도록 시작 경로를 바꾼 뒤 PX4 실행 파일을 호출합니다.
+  - px4:
+      # root: PX4의 etc/init.d-posix/rcS와 실행 중 생성되는 매개변수·로그 파일의 기준 경로입니다.
+      root: /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/rootfs
+      # panes: 선택 값과 월드 파일을 확인한 뒤 PX4를 실행하며 종료 후에도 셸에 로그를 남깁니다.
+      panes:
+        - >-
+            if [[ -z "${PX4_SIM_MODEL:-}" || -z "${PX4_GZ_WORLD:-}" ]]; then
+              echo "ERROR: Set PX4_SIM_MODEL and PX4_GZ_WORLD in simulation/simulation.yml." >&2;
+              false;
+            elif [[ ! -f "/DroneSimEnv/PX4-Autopilot/Tools/simulation/gz/worlds/${PX4_GZ_WORLD}.sdf" ]]; then
+              echo "ERROR: PX4 built-in world was not found: ${PX4_GZ_WORLD}.sdf" >&2;
+              false;
+            else
+              /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/bin/px4;
+            fi

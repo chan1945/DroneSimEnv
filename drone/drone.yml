@@ -1,4 +1,4 @@
-# Drone 컨테이너에서 DDS Agent 로그와 작업용 셸을 좌우로 나누는 tmuxinator 프로젝트 파일입니다.
+# Drone 컨테이너에서 DDS Agent·작업용 셸을 좌우로 나누고 RViz2를 별도 창에서 실행하는 tmuxinator 설정입니다.
 # Docker ENTRYPOINT가 이 파일을 읽어 세션을 만들고 sim_run.sh의 xterm이 같은 세션에 접속합니다.
 
 # name: 서비스 이름과 동일한 drone 세션을 사용해 터미널 재접속 시 기존 화면에 연결합니다.
@@ -17,7 +17,7 @@ enable_pane_titles: true
 # PID 1도 조회해 root 권한으로 시작한 실행 경로에서 GPU 보조 그룹이 빠지는 경우를 처리합니다.
 on_project_start: for group_id in $(id -G) $(sed -n "s/^Groups:[[:space:]]*//p" /proc/1/status); do if ! getent group "$group_id" >/dev/null; then groupadd --gid "$group_id" "host-gid-$group_id"; fi; done
 
-# windows: main 창 하나에 Agent용 pane과 대화형 셸 pane을 순서대로 생성합니다.
+# windows: main 창에는 Agent·작업용 셸을 배치하고 rviz 창에는 RViz2 실행 로그를 표시합니다.
 windows:
   # main: Drone의 기본 작업 창이며 두 pane의 레이아웃과 실행 명령을 함께 정의합니다.
   - main:
@@ -30,3 +30,12 @@ windows:
         - agent: MicroXRCEAgent udp4 -p 8888
         # shell: 실행 명령을 비워 ROS 환경을 로드한 기본 대화형 셸을 작업용으로 사용합니다.
         - shell:
+  # rviz: ROS 환경이 로드된 별도 창에서 RViz2를 실행하며 종료 후에는 로그를 확인할 셸을 유지합니다.
+  # DISPLAY·WAYLAND_DISPLAY: 미정의 값은 빈 문자열로 읽고 둘 중 하나라도 있으면 GUI 실행을 시도합니다.
+  # 화면 환경이 없으면 건너뛴 이유를 출력하고 Agent와 작업용 셸은 계속 사용할 수 있게 합니다.
+  - rviz: >-
+      if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        rviz2;
+      else
+        echo "Skipping RViz2 because no GUI display variables are set.";
+      fi
