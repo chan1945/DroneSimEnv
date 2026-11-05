@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# PX4 내장 x500 모델과 기본 Gazebo 월드로 simulation, ground, drone 컨테이너를 실행하는 스크립트입니다.
+# simulation.yml이 선택한 PX4 내장 모델·월드로 simulation, ground, drone 컨테이너를 실행하는 스크립트입니다.
 # CLI 인자를 검사하고, sim_build.sh로 만든 이미지를 실행해 xterm에서 tmux에 접속합니다.
 # 원래 터미널에서 키를 누르거나 종료 신호를 받으면 이 프로젝트의 컨테이너를 제거합니다.
 # 명령 실패, 미정의 변수 사용, 파이프라인 실패를 감지하면 실행을 중단합니다.
@@ -21,6 +21,8 @@ SIMULATION_IMAGE="dronesimenv/simulation:cuda${CUDA_VERSION}"
 DRONE_IMAGE="dronesimenv/drone:cuda${CUDA_VERSION}"
 # GROUND_IMAGE: CUDA_VERSION을 태그에 넣어 QGroundControl 이미지의 로컬 이름을 구성합니다.
 GROUND_IMAGE="dronesimenv/ground:cuda${CUDA_VERSION}"
+# SIMULATION_CONFIG: 모델·월드·PX4 실행을 정의한 레포 YAML을 Simulation에 읽기 전용으로 연결합니다.
+SIMULATION_CONFIG="${PROJECT_ROOT}/simulation/simulation.yml"
 # QGC_DEFAULT_INI: 실행할 때마다 복사할 레포의 기본 설정 파일을 읽기 전용 마운트 원본으로 사용합니다.
 QGC_DEFAULT_INI="${PROJECT_ROOT}/ground/QGroundControl.ini"
 # CLEANUP_DONE: cleanup이 정리를 시작하면 true가 되어 종료 신호가 겹쳐도 중복 삭제를 막습니다.
@@ -28,14 +30,14 @@ CLEANUP_DONE=false
 # CLEANUP_ENABLED: 사전 검사가 끝나 컨테이너 변경을 시작할 때만 true가 되어 조기 삭제를 막습니다.
 CLEANUP_ENABLED=false
 
-# usage: 인자 없이 호출하며 기본 실행·도움말 사용법과 PX4 내장 모델·월드를 표준 출력에 표시합니다.
+# usage: 인자 없이 호출하며 실행·도움말 사용법과 모델·월드를 선택할 YAML 경로를 표시합니다.
 usage() {
     cat <<EOF
 Usage:
   $0
   $0 --help
 
-Runs PX4's built-in x500 model in the default Gazebo world.
+Runs PX4 SITL and Gazebo using simulation/simulation.yml.
 EOF
 }
 
@@ -162,25 +164,8 @@ configure_x11_access() {
     fi
 }
 
-# configure_container_groups: $1 컨테이너의 실행 프로세스와 PID 1의 그룹 중 이름이 없는 GID를 등록합니다.
-# --user root로 실행한 exec는 GPU 보조 그룹을 상속하지 않으므로 /proc/1/status에서도 실제 GID를 읽습니다.
-# 그룹의 숫자 ID와 권한은 유지하고 이름만 추가해 tmux 로그인 셸의 groups 경고를 방지합니다.
-configure_container_groups() {
-    # service: $1의 컨테이너 이름을 docker exec에 전달해 해당 컨테이너의 그룹 데이터베이스만 수정합니다.
-    local service="$1"
-
-    docker exec --user root "${service}" /bin/sh -c '
-        # group_id: 현재 exec와 GPU 그룹을 상속한 PID 1의 숫자 GID를 순회해 이름 등록 여부를 확인합니다.
-        for group_id in $(id -G) $(sed -n "s/^Groups:[[:space:]]*//p" /proc/1/status); do
-            if ! getent group "$group_id" >/dev/null; then
-                groupadd --gid "$group_id" "host-gid-$group_id"
-            fi
-        done
-    '
-}
-
 # run_service: $1 서비스 이름, $2 이미지, $3 호스트 소스, $4 컨테이너 소스 경로로 Docker 컨테이너를 생성합니다.
-# 공통 실행 옵션에 simulation의 내장 모델 설정과 WSLg 또는 X11 옵션을 추가해 백그라운드로 실행합니다.
+# 공통 실행 옵션에 서비스별 설정 파일과 WSLg 또는 X11 옵션을 추가해 백그라운드로 실행합니다.
 run_service() {
     # service: $1에서 받은 이름으로 컨테이너를 식별하고 서비스별 옵션 적용 여부를 결정합니다.
     local service="$1"
@@ -225,14 +210,9 @@ run_service() {
     fi
 
     if [[ "${service}" == "simulation" ]]; then
-        # 이미지에 포함된 PX4 기본 월드와 x500 모델을 사용하도록 고정된 환경변수를 전달합니다.
+        # 모델·월드·PX4 실행을 정의한 YAML을 연결해 설정 변경을 다음 컨테이너 실행부터 반영합니다.
         run_args+=(
-            # PX4_GZ_WORLD: PX4 소스에 포함된 default.sdf 월드를 선택합니다.
-            --env "PX4_GZ_WORLD=default"
-            # PX4_SIM_MODEL: 내장 gz_x500 airframe을 선택하고 Gazebo의 x500 모델을 생성하도록 합니다.
-            --env "PX4_SIM_MODEL=gz_x500"
-            # GZ_IP: Gazebo Transport가 호스트 네트워크의 루프백 주소를 통신 주소로 사용하도록 지정합니다.
-            --env "GZ_IP=127.0.0.1"
+            --mount "type=bind,source=${SIMULATION_CONFIG},target=/DroneSimEnv/simulation.yml,readonly"
         )
     fi
 
@@ -266,22 +246,6 @@ run_service() {
 
     echo "Creating and starting ${service}..."
     docker run "${run_args[@]}" "${image}" >/dev/null
-
-    # drone과 ground는 YAML 시작 훅에서 셸 생성 전에 그룹을 등록하므로 simulation만 여기서 처리합니다.
-    if [[ "${service}" == "simulation" ]]; then
-        configure_container_groups "${service}"
-    fi
-}
-
-# start_px4: simulation 컨테이너에 shell·px4 tmux 창을 만들고 PX4 실행 파일과 Enter 키를 전송합니다.
-# PX4 창은 빌드된 rootfs에서 시작해 초기화 파일을 찾게 하고, 실행 출력은 tmux에 남깁니다.
-start_px4() {
-    docker exec simulation tmux new-session -d -s simulation -n shell \
-        -c /DroneSimEnv/simulation_ws
-    docker exec simulation tmux new-window -t simulation -n px4 \
-        -c /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/rootfs
-    docker exec simulation tmux send-keys -t simulation:px4 \
-        /DroneSimEnv/PX4-Autopilot/build/px4_sitl_default/bin/px4 Enter
 }
 
 # open_terminal: $1 컨테이너, $2 창 제목, $3 작업 경로로 호스트 xterm을 비동기 실행합니다.
@@ -300,7 +264,7 @@ open_terminal() {
         tmux new-session -A -s "${service}" -c "${workdir}" &
 }
 
-# main: CLI 인자를 검사한 뒤 이미지·호스트 도구를 확인하고 컨테이너, PX4, 서비스 터미널을 순서대로 시작합니다.
+# main: CLI 인자·이미지·호스트 도구·설정 파일을 확인하고 컨테이너와 서비스 터미널을 시작합니다.
 # 마지막에 키 입력을 기다리며 입력 종료·오류·신호로 함수가 끝나면 EXIT 트랩이 컨테이너를 정리합니다.
 main() {
     # 도움말을 뜻하는 반환 코드 2는 정상 종료로 바꿔 Docker 검사나 컨테이너 변경 없이 끝냅니다.
@@ -314,6 +278,10 @@ main() {
     require_xterm
 
     # 마운트 원본을 컨테이너 변경 전에 검사해 파일 누락으로 기존 실행 환경이 먼저 삭제되는 일을 막습니다.
+    if [[ ! -f "${SIMULATION_CONFIG}" || ! -r "${SIMULATION_CONFIG}" ]]; then
+        echo "ERROR: Simulation YAML is missing or unreadable: ${SIMULATION_CONFIG}" >&2
+        return 1
+    fi
     if [[ ! -f "${QGC_DEFAULT_INI}" || ! -r "${QGC_DEFAULT_INI}" ]]; then
         echo "ERROR: QGroundControl default INI is missing or unreadable: ${QGC_DEFAULT_INI}" >&2
         return 1
@@ -332,8 +300,6 @@ main() {
     run_service "drone" "${DRONE_IMAGE}" \
         "${PROJECT_ROOT}/drone/drone_ws/src" \
         "/DroneSimEnv/drone_ws/src"
-    start_px4
-
     # 새 xterm이 접속하기 전에 3초 대기하며, 이 대기는 PX4·Gazebo의 준비 완료 검사는 아닙니다.
     sleep 3
     open_terminal "drone" "Drone (ROS 2)" \
