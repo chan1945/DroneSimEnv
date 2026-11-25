@@ -41,6 +41,28 @@ and restart `sim_run.sh` to change them without rebuilding the image. See
 [Simulation settings](docs/simulation-settings.md) for configuration and logs.
 Run `sim_run.sh` without arguments, or use `--help` to show usage information.
 
+### Fly with the keyboard
+
+After building the images and starting the simulation, run this command in the
+**Drone** terminal's shell:
+
+```bash
+ros2 launch drone_keyboard_control keyboard_control.launch.xml
+```
+
+Click the keyboard control window. With all movement keys released, press **P**
+and wait for the arm confirmation. Hold **Shift** to take off, then release it
+at the desired height. **W/S** move forward/backward relative to the nose,
+**A/D** move left/right, **Shift/Ctrl** climb/descend, and **Q/E** turn
+left/right. Combined movement has a target speed of 2 m/s, and turns are
+45°/s. Release the keys to brake and hover.
+
+Closing the input window or switching focus neutralizes the controls. Keep
+the launch process running to maintain offboard control. The two nodes and
+their ROS interfaces are described in the [package design](docs/keyboard-rc-design.md).
+
+### Simulation terminals
+
 The simulation container starts tmuxinator from this YAML and runs PX4 SITL
 and Gazebo in its `px4` tmux window. Use `Ctrl+B`, then `0` to switch to the
 simulation shell, and `Ctrl+B`, then `1` to return to PX4.

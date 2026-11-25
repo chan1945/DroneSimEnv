@@ -1,0 +1,5 @@
+<!-- PX4 제어 루프와 창 입력 처리가 독립적으로 실행되도록 각 노드를 별도 프로세스로 시작합니다. -->
+<launch>
+  <node pkg="drone_keyboard_control" exec="px4_offboard" output="screen"/>
+  <node pkg="drone_keyboard_control" exec="keyboard_teleop" output="screen"/>
+</launch>
