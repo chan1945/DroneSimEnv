@@ -263,8 +263,9 @@ open_terminal() {
     # workdir: $3을 tmux -c에 전달해 새 세션을 만들 때 사용할 컨테이너 작업 경로를 지정합니다.
     local workdir="$3"
 
+    # -bg와 -fg는 WSL2와 Ubuntu에서 공통으로 배경을 검은색, 기본 글자를 흰색으로 지정합니다.
     # -A는 기존 세션에 접속하거나 새로 생성하며, 마지막 &는 원래 터미널의 입력 대기를 유지합니다.
-    xterm -T "${title}" -e \
+    xterm -bg black -fg white -T "${title}" -e \
         docker exec -it "${service}" \
         tmux new-session -A -s "${service}" -c "${workdir}" &
 }
