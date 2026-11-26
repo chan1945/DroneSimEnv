@@ -263,6 +263,16 @@ open_terminal() {
     # workdir: $3을 tmux -c에 전달해 새 세션을 만들 때 사용할 컨테이너 작업 경로를 지정합니다.
     local workdir="$3"
 
+    if [[ "${service}" == drone ]]; then
+        # WINDOWID는 xterm의 자식 셸에서 확장해 Docker 안의 tmux 클라이언트에 전달합니다.
+        # shellcheck disable=SC2016
+        xterm -bg black -fg white -T "${title}" -e bash -c '
+            exec docker exec -it --env "WINDOWID=${WINDOWID:?}" "$1" \
+                tmux new-session -A -s "$1" -c "$2"
+        ' bash "${service}" "${workdir}" &
+        return
+    fi
+
     # -bg와 -fg는 WSL2와 Ubuntu에서 공통으로 배경을 검은색, 기본 글자를 흰색으로 지정합니다.
     # -A는 기존 세션에 접속하거나 새로 생성하며, 마지막 &는 원래 터미널의 입력 대기를 유지합니다.
     xterm -bg black -fg white -T "${title}" -e \

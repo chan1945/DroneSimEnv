@@ -50,16 +50,22 @@ After building the images and starting the simulation, run this command in the
 ros2 launch drone_keyboard_control keyboard_control.launch.xml
 ```
 
-Click the keyboard control window. With all movement keys released, press **P**
-and wait for the arm confirmation. Hold **Shift** to take off, then release it
-at the desired height. **W/S** move forward/backward relative to the nose,
-**A/D** move left/right, **Shift/Ctrl** climb/descend, and **Q/E** turn
-left/right. Combined movement has a target speed of 2 m/s, and turns are
-45°/s. Release the keys to brake and hover.
+Fly in the same **Drone** xterm and tmux pane on Ubuntu or WSL2 with WSLg.
+Release all movement keys, press **P**, and wait for the arm confirmation in
+the terminal. Hold **Shift** to take off, then release it at the desired height.
 
-Closing the input window or switching focus neutralizes the controls. Keep
-the launch process running to maintain offboard control. The two nodes and
-their ROS interfaces are described in the [package design](docs/keyboard-rc-design.md).
+| Keys | While held |
+| --- | --- |
+| **W / S** | Move forward / backward relative to the nose |
+| **A / D** | Move left / right relative to the nose |
+| **Shift / Ctrl** | Climb / descend |
+| **Q / E** | Turn left / right at 45°/s |
+
+Hold keys together to combine movement and turns. The combined movement target
+is 2 m/s. Releasing both keys for an axis immediately zeros that axis's command.
+Leaving the xterm or switching to another tmux pane neutralizes all controls so
+the drone can brake and hover. After returning, release and press the keys again.
+`Ctrl+C` stops the launch. See the [package design](docs/keyboard-rc-design.md).
 
 ### Simulation terminals
 
@@ -118,6 +124,15 @@ docker exec -it drone tmux new-session -A -s drone -c /DroneSimEnv/drone_ws
 
 Replace `drone` with `simulation` or `ground` when needed. Their starting
 folders are `/DroneSimEnv/simulation_ws` and `/DroneSimEnv/ground_ws`.
+
+To fly from a reopened Drone terminal, reconnect through xterm so the package
+can identify its window. If a previous keyboard launch is still running, stop it
+with `Ctrl+C` and start it again in the reopened pane.
+
+```bash
+xterm -bg black -fg white -T 'Drone (ROS 2)' -e bash -c \
+  'exec docker exec -it --env "WINDOWID=${WINDOWID:?}" drone tmux new-session -A -s drone -c /DroneSimEnv/drone_ws'
+```
 
 ### QGroundControl logs
 

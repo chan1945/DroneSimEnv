@@ -1,19 +1,18 @@
-# 조종 창의 키 누름과 해제를 ROS 2 속도 명령과 비동기 시동 요청으로 전달합니다.
+# Drone 터미널 입력을 ROS 2 속도 명령과 비동기 시동 요청으로 전달합니다.
 import math
+import os
+import signal
+import termios
 import time
-import tkinter as tk
-from tkinter import ttk
 
 import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 from std_srvs.srv import Trigger
+from Xlib import display, error
 
-
-# CONTROL_KEYS에는 조종에 사용하는 Tk 키 이름만 소문자로 저장합니다.
-CONTROL_KEYS = {
-    "w", "s", "a", "d", "q", "e", "p", "shift_l", "shift_r", "control_l", "control_r",
-}
+from .xterm_input import XtermInput, quiet_terminal
 
 
 def velocity_for_keys(pressed):
@@ -32,16 +31,13 @@ def velocity_for_keys(pressed):
 
 
 class KeyboardTeleop(Node):
-    """Tk 이벤트 루프 하나에서 키 상태, 속도 발행과 ROS 서비스 응답을 처리합니다."""
+    """키 입력을 속도 토픽과 비동기 시동 서비스로 연결합니다."""
 
-    def __init__(self, window):
-        """window에 조종 화면을 구성하고 키 상태와 ROS 통신을 초기화합니다."""
+    def __init__(self):
+        """조종 키 상태와 ROS 통신을 초기화합니다."""
         super().__init__("keyboard_teleop")
-        # window는 입력을 받는 최상위 Tk 창이며 ROS 처리 주기도 예약합니다.
-        self.window = window
-        # pressed는 실제로 누른 키 집합이며 pending_releases는 X11 자동 반복 판별용 예약입니다.
+        # pressed는 활성 pane에서 현재 누르고 있는 조종 키입니다.
         self.pressed = set()
-        self.pending_releases = {}
         # commands는 기수 기준 속도 토픽에 최신 명령 하나를 보관합니다.
         self.commands = self.create_publisher(TwistStamped, "teleop/cmd_vel", 1)
         # arm_client와 arm_future는 동시에 하나의 시동 요청만 비동기로 처리합니다.
@@ -49,65 +45,19 @@ class KeyboardTeleop(Node):
         self.arm_future = None
         # arm_deadline은 서버가 요청 도중 사라졌을 때 새 요청을 허용할 단조 시각입니다.
         self.arm_deadline = 0.0
-        # status는 요청 진행과 PX4 응답을 조종 창 하단에 표시합니다.
-        self.status = tk.StringVar(master=window, value="Click this window to control the drone.")
-        window.title("Drone keyboard control")
-        ttk.Label(window, padding=12, justify="left", text=(
-            "P    Arm\n"
-            "W / S    Forward / Backward       A / D    Left / Right\n"
-            "Shift / Ctrl    Ascend / Descend       Q / E    Turn left / right"
-        )).pack(anchor="w")
-        ttk.Label(window, padding=12, textvariable=self.status, wraplength=420).pack(anchor="w")
-        window.bind("<KeyPress>", self.press)
-        window.bind("<KeyRelease>", self.release)
-        window.bind("<FocusOut>", self.neutralize)
-        window.protocol("WM_DELETE_WINDOW", window.quit)
-        window.after(0, self.tick)
+        # next_publish는 키 변화가 없을 때에도 명령을 발행할 다음 시각입니다.
+        self.next_publish = 0.0
 
-    def press(self, event):
-        """event.keysym의 첫 누름만 반영하고 같은 시각에 생성된 자동 반복을 제거합니다."""
-        # key는 Shift나 Caps Lock으로 대문자가 되어도 동일한 조종 키로 인식합니다.
-        key = event.keysym.lower()
-        if key not in CONTROL_KEYS:
-            return
-        # pending은 직전 해제 시각과 Tk 예약 ID로 실제 재누름과 X11 반복을 구분합니다.
-        pending = self.pending_releases.pop(key, None)
-        if pending is not None:
-            self.window.after_cancel(pending[1])
-            if pending[0] != event.time:
-                self.pressed.discard(key)
-        if key in self.pressed:
-            return
-        self.pressed.add(key)
-        if key == "p":
+    def update_input(self, pressed, arm):
+        """키 변화 즉시 속도를 발행하고 P의 첫 누름만 시동 요청으로 전달합니다."""
+        # now는 정기 발행 간격을 계산하는 단조 시각입니다.
+        now = time.monotonic()
+        if pressed != self.pressed or now >= self.next_publish:
+            self.pressed = pressed
+            self.publish_command()
+            self.next_publish = now + 0.05
+        if arm:
             self.request_arm()
-        else:
-            self.publish_command()
-
-    def release(self, event):
-        """event의 해제를 한 이벤트 묶음만 미뤄 자동 반복으로 생성된 눌림을 기다립니다."""
-        # key는 해제를 기다리는 물리 키이며 키마다 하나의 예약만 허용합니다.
-        key = event.keysym.lower()
-        if key in self.pressed and key not in self.pending_releases:
-            # callback_id로 바로 뒤에 반복 누름이 오면 이 해제 예약을 취소합니다.
-            callback_id = self.window.after_idle(self.finish_release, key)
-            self.pending_releases[key] = (event.time, callback_id)
-
-    def finish_release(self, key):
-        """반복이 아닌 key 해제를 확정해 해당 축을 즉시 갱신합니다."""
-        self.pending_releases.pop(key)
-        self.pressed.discard(key)
-        self.publish_command()
-
-    def neutralize(self, event=None):
-        """포커스 해제 이벤트(event)나 종료 시 모든 예약과 눌린 키를 비우고 중립을 보냅니다."""
-        # pending은 각 키의 (해제 시각, 예약 ID) 쌍입니다.
-        for pending in self.pending_releases.values():
-            self.window.after_cancel(pending[1])
-        self.pending_releases.clear()
-        self.pressed.clear()
-        if rclpy.ok():
-            self.publish_command()
 
     def publish_command(self):
         """현재 키 상태를 base_footprint 기준의 시각이 포함된 속도 명령으로 발행합니다."""
@@ -124,11 +74,11 @@ class KeyboardTeleop(Node):
         if self.arm_future is not None:
             return
         if not self.arm_client.service_is_ready():
-            self.status.set("Arm service unavailable. Check px4_offboard, then press P again.")
+            self.get_logger().warning("Arm service unavailable. Check px4_offboard, then press P again.")
             return
         self.arm_future = self.arm_client.call_async(Trigger.Request())
         self.arm_deadline = time.monotonic() + 15.0
-        self.status.set("Waiting for PX4 to confirm arming...")
+        self.get_logger().info("Waiting for PX4 to confirm arming...")
 
     def check_arm(self):
         """서비스 결과를 표시하고 서버가 응답하지 않으면 로컬 대기 요청을 정리합니다."""
@@ -140,45 +90,59 @@ class KeyboardTeleop(Node):
                 response = self.arm_future.result()
                 # outcome은 사용자가 응답의 성공 여부를 즉시 알 수 있게 표시합니다.
                 outcome = "Armed" if response.success else "Arm failed"
-                self.status.set(f"{outcome}: {response.message}")
+                self.get_logger().info(f"{outcome}: {response.message}")
             except Exception as error:
                 # error는 서비스 통신 예외이며 다음 P 입력으로 다시 요청할 수 있습니다.
-                self.status.set(f"Arm service error: {error}")
+                self.get_logger().error(f"Arm service error: {error}")
             self.arm_future = None
         elif time.monotonic() >= self.arm_deadline:
             self.arm_client.remove_pending_request(self.arm_future)
             self.arm_future = None
-            self.status.set("Arm response timed out. Check PX4 status.")
-
-    def tick(self):
-        """50 ms마다 ROS 응답을 비차단 처리하고 중립을 포함한 현재 명령을 발행합니다."""
-        if not rclpy.ok():
-            self.window.quit()
-            return
-        rclpy.spin_once(self, timeout_sec=0.0)
-        self.check_arm()
-        self.publish_command()
-        self.window.after(50, self.tick)
+            self.get_logger().warning("Arm response timed out. Check PX4 status.")
 
 
 def main(args=None):
-    """args의 ROS 인자를 적용해 창을 열고 종료 시 중립 명령과 자원 정리를 수행합니다."""
-    # window는 ROS 초기화 전에 열어 디스플레이 연결 실패를 즉시 보고합니다.
+    """조종 pane에서 X11과 ROS를 처리하고 종료 전에 중립을 발행합니다."""
+    # pane은 launch가 실행된 tmux pane의 고유 ID입니다.
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        raise SystemExit("Start keyboard control in the Drone xterm opened by sim_run.sh.")
     try:
-        window = tk.Tk()
-    except tk.TclError as error:
-        # error는 X11/WSLg 연결 실패와 같이 창을 열 수 없는 원인을 보관합니다.
-        raise SystemExit(f"Cannot open keyboard control window: {error}") from error
-    rclpy.init(args=args)
-    # node는 Tk 메인 스레드에 조종 및 ROS 콜백을 등록합니다.
-    node = KeyboardTeleop(window)
-    try:
-        window.mainloop()
+        # connection은 기존 xterm의 X 서버를 관찰하는 연결입니다.
+        connection = display.Display()
+        try:
+            # keyboard는 launch를 시작한 창과 pane에 입력 수신을 한정합니다.
+            keyboard = XtermInput(connection, pane)
+            with quiet_terminal() as tty:
+                # 기존 터미널의 Ctrl+C와 launch의 SIGTERM 모두 정리 경로로 처리합니다.
+                signal.signal(signal.SIGTERM, signal.default_int_handler)
+                rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
+                # node는 키 상태에 따른 속도 및 시동 요청을 발행합니다.
+                node = KeyboardTeleop()
+                try:
+                    node.get_logger().info(
+                        "Fly in this pane: P arm, W/S forward/back, A/D left/right, "
+                        "Shift/Ctrl climb/descend, Q/E turn. Ctrl+C stops the launch."
+                    )
+                    while rclpy.ok():
+                        # pressed와 arm은 이번 입력 주기의 키 상태와 P 누름 여부입니다.
+                        pressed, arm = keyboard.read()
+                        node.update_input(pressed, arm)
+                        rclpy.spin_once(node, timeout_sec=0.0)
+                        node.check_arm()
+                        termios.tcflush(tty, termios.TCIFLUSH)
+                        time.sleep(0.01)
+                finally:
+                    if rclpy.ok():
+                        node.pressed.clear()
+                        node.publish_command()
+                    node.destroy_node()
+                    rclpy.try_shutdown()
+        finally:
+            connection.close()
     except KeyboardInterrupt:
         pass
-    finally:
-        node.neutralize()
-        node.destroy_node()
-        window.destroy()
-        if rclpy.ok():
-            rclpy.shutdown()
+    except (OSError, RuntimeError, termios.error,
+            error.DisplayError, error.ConnectionClosedError, error.XError) as exc:
+        # exc는 창 연결, tmux pane 또는 터미널 설정 오류의 원인을 알려 줍니다.
+        raise SystemExit(f"Cannot read Drone xterm input: {exc}") from exc
